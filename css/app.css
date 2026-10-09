@@ -601,3 +601,47 @@ details.demo .chip-row { margin-top: 8px; }
 .orient-pin { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); font-size: 15px; }
 .orient-pin svg { width: 18px; height: 18px; color: var(--warn); flex: none; }
 
+
+/* ---------- update content ---------- */
+.sel-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: var(--r-ctl); background: var(--surface-2); font-size: 15px; }
+.link { border: 0; background: none; color: var(--accent); font-weight: 700; padding: 10px 4px; }
+.tree { display: flex; flex-direction: column; gap: 8px; }
+.tree-zone { border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); overflow: hidden; }
+.tree-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 0 14px; border: 0; background: none; text-align: left; }
+.tree-row.zone { font-size: 17px; }
+.tree-row .caret svg, .tree-open .caret svg { width: 18px; height: 18px; transition: transform .15s; color: var(--fg-2); }
+.tree-row[aria-expanded="true"] .caret svg, .tree-open[aria-expanded="true"] .caret svg { transform: rotate(90deg); }
+.tree-name { font-weight: 800; flex: 1; }
+.tree-meta { font: 600 13px/1 var(--f-mono); color: var(--fg-3); }
+.tree-aisle { border-top: 1px solid var(--line); }
+.tree-row.aisle { padding: 0 8px 0 0; gap: 0; }
+.tree-open { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 34px; border: 0; background: none; text-align: left; font-size: 16px; }
+.tree-all { flex: none; height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-weight: 700; font-size: 13px; color: var(--accent); }
+.tree-all[aria-pressed="true"] { color: var(--fg-2); }
+.tree-all:disabled { opacity: .4; }
+.tree-dev { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 8px 12px 8px 30px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; position: relative; }
+.tree-dev[aria-pressed="true"] { background: var(--accent-soft); }
+.tree-dev[data-blocked] { opacity: .45; }
+.tree-dev .check { flex: none; width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; background: var(--surface); }
+.tree-dev[aria-pressed="true"] .check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tree-dev .check svg { width: 16px; height: 16px; }
+.dev-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.dev-meta b { font-size: 16px; }
+.dev-meta .note { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dev-meta .status { font-size: 12px; padding: 4px 8px; }
+.dev-why { position: absolute; right: 12px; top: 10px; font: 700 11px/1 var(--f-mono); color: var(--fg-3); text-transform: uppercase; }
+.thumb { flex: none; width: 96px; line-height: 0; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 2px var(--hw-frame); background: #000; }
+.thumb[data-o="portrait"] { width: 34px; }
+.thumb svg { width: 100%; height: auto; display: block; }
+.thumb.big { width: 150px; }
+.thumb.big[data-o="portrait"] { width: 60px; }
+.cur-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 18px; }
+.cur-list { display: flex; flex-direction: column; gap: 10px; }
+.cur-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-ctl); background: var(--surface); border: 1px solid var(--line); }
+.hint-row.as-note { cursor: default; font-weight: 600; font-size: 15px; line-height: 1.35; align-items: flex-start; }
+.hint-row.as-note svg { color: var(--pending); margin-top: 2px; }
+.hint-row.as-note.bad { background: var(--bad-soft); }
+.hint-row.as-note.bad svg { color: var(--bad); }
+.btn.small { height: 44px; margin-top: 10px; font-size: 15px; }
+/* long steps scroll; their parts keep their size instead of squeezing */
+.step > * { flex-shrink: 0; }

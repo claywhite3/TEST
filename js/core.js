@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const BUILD = "v0.4.7 · 2026-10-09";
+  const BUILD = "v0.5.0 · 2026-10-09";
 
   /* ---------- fixtures ----------
      Trap cases are deliberate (principle 55). Don't tidy them:
@@ -46,6 +46,25 @@
   ];
   const SERIAL_LEN = 13;
 
+  /* ---------- fleet: what each display shows and where it hangs ----------
+     Seed signs for the Update flow. Location is Zone (letters) + Aisle + Section, shown as A15-1.
+     Trap cases (principle 55): …0112 never connects after a push (goes Not confirmed);
+     A16-2 was pushed 2 min ago and is still waiting for a wake; GM102-4 is portrait (can't be batched with landscape). */
+  const SEED = {
+    "193205A4B0091": { zone: "A", aisle: "15", section: "1", orient: "landscape", ago: 600, sign: { type: "edlp", priceC: "212", uom: "lb", desc: "Tomatoes on the Vine", plu: "4664", img: "assets/products/tomatoes-on-vine.png" } },
+    "193205A4B0107": { zone: "A", aisle: "15", section: "2", orient: "landscape", ago: 600, sign: { type: "rollback", priceC: "119", wasC: "129", uom: "lb", desc: "Navel Oranges", plu: "4013", img: "assets/products/navel-oranges.png" } },
+    "193205A4B0112": { zone: "A", aisle: "16", section: "1", orient: "landscape", ago: 30, sign: { type: "edlp", priceC: "58", uom: "lb", desc: "Bananas", plu: "4011", img: "assets/products/bananas.png" } },
+    "193205A4B0118": { zone: "A", aisle: "16", section: "2", orient: "landscape", ago: 2, pending: true, sign: { type: "manager", priceC: "67", wasC: "97", uom: "ea", desc: "Hass Avocados", plu: "4225", img: "assets/products/hass-avocados.png" } },
+    "193205A4B0124": { zone: "B", aisle: "3", section: "1", orient: "landscape", ago: 900, sign: { type: "clearance", priceC: "212", wasC: "348", uom: "lb", desc: "Pie Pumpkins", plu: "3134", img: "assets/products/pie-pumpkins.png" } },
+    "193205A4B0131": { zone: "GM", aisle: "102", section: "4", orient: "portrait", ago: 900, sign: { type: "rollback", priceC: "147", wasC: "198", uom: "lb", desc: "Red Delicious Apples", plu: "4016", img: "assets/products/red-delicious-apples.png" } },
+  };
+  DEVICES.push({ serial: "193205A4B0118", siteId: "5624", battery: 40, behavior: "ok" },
+               { serial: "193205A4B0124", siteId: "5624", battery: 52, behavior: "ok" },
+               { serial: "193205A4B0131", siteId: "5624", battery: 61, behavior: "ok" });
+
+  const NOT_CONFIRMED_MIN = 7;   // no Wi-Fi connection this long after a push → Not confirmed
+  const CONNECT_DEMO_SEC = 25;   // prototype only: a woken display "connects" this long after its push
+
   /* ---------- session state (shared across pages) ---------- */
   const KEY = "engage-companion";
   let state;
@@ -55,6 +74,54 @@
 
   const allSites = () => CHAINS.flatMap((c) => c.sites.map((s) => ({ ...s, chainId: c.id, chain: c.name })));
   const site = (id = state.siteId) => allSites().find((s) => s.id === id) || null;
+
+  /* fleet for a site: seed + installs + pushes made this session (all kept in session state) */
+  function fleet(siteId = state.siteId) {
+    const now = Date.now();
+    const out = [];
+    DEVICES.filter((d) => d.siteId === siteId && SEED[d.serial]).forEach((d) => {
+      const seed = SEED[d.serial];
+      const base = { serial: d.serial, behavior: d.behavior, zone: seed.zone, aisle: seed.aisle, section: seed.section, orient: seed.orient, sign: seed.sign,
+        pushedAt: now - seed.ago * 60000, connectedAt: seed.pending || d.behavior === "silent" ? null : now - (seed.ago - 1) * 60000 };
+      out.push(Object.assign(base, (state.fleet || {})[d.serial] || {}));
+    });
+    Object.values(state.fleet || {}).forEach((d) => { if (d.siteId === siteId && !out.some((o) => o.serial === d.serial)) out.push(d); });
+    return out.map((d) => Object.assign({}, d, { status: statusOf(d, now) }));
+  }
+  /* Sent → Waiting for wake → Updated; Not confirmed once 7 min pass with no connection */
+  function statusOf(d, now = Date.now()) {
+    if (d.connectedAt && d.connectedAt >= d.pushedAt) return "updated";
+    if (d.behavior !== "silent" && d.woken && now - d.pushedAt >= CONNECT_DEMO_SEC * 1000) return "updated";
+    return now - d.pushedAt >= NOT_CONFIRMED_MIN * 60000 ? "unconfirmed" : "waiting";
+  }
+  const STATUS = {
+    waiting: { word: "Waiting for wake", cls: "pending" },
+    updated: { word: "Updated", cls: "confirmed" },
+    unconfirmed: { word: "Not confirmed", cls: "rejected" },
+  };
+  /* record a push (Install or Update). meta carries location/orientation for new installs */
+  function recordPush(serials, sign, meta = {}) {
+    state.fleet = state.fleet || {};
+    const now = Date.now();
+    serials.forEach((sn) => {
+      const known = (DEVICES.find((d) => d.serial === sn) || {});
+      const prev = fleet().find((d) => d.serial === sn) || {};
+      state.fleet[sn] = Object.assign({ serial: sn, siteId: state.siteId, behavior: known.behavior || "ok" },
+        prev, meta[sn] || {}, { sign: Object.assign({}, sign), pushedAt: now, connectedAt: null, woken: false });
+      delete state.fleet[sn].status;
+    });
+    save();
+  }
+  /* the tech finished the wake steps for this display (prototype: lets it "connect") */
+  function markWoken(sn) {
+    state.fleet = state.fleet || {};
+    const cur = fleet().find((d) => d.serial === sn);
+    if (!cur) return;
+    state.fleet[sn] = Object.assign({}, cur, state.fleet[sn] || {}, { woken: true });
+    delete state.fleet[sn].status;
+    save();
+  }
+  const locCode = (d) => `${d.zone}${d.aisle}-${d.section}`;
 
   /* ---------- navigation ---------- */
   const PAGES = { login: "login.html", site: "site.html", home: "home.html", install: "install.html", content: "content.html", battery: "battery.html", trouble: "troubleshoot.html" };
@@ -135,5 +202,5 @@
     el.querySelector("#sheet-out").focus();
   }
 
-  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
+  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, locCode, NOT_CONFIRMED_MIN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
 })();

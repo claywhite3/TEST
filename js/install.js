@@ -126,7 +126,14 @@
       if (!nx.aisle) nx.aisle = prev.aisle;
       f.locIdx++; save(); render(); return;
     }
-    if (f.step === "preview") { haptic(); f.wakeIdx = 0; f.wakeSlide = 0; return setStep("wake"); }
+    if (f.step === "preview") {
+      // the push: installed displays join the site's fleet, so Update Content can find them
+      const meta = {};
+      f.devices.forEach((d) => { meta[d.serial] = { zone: d.zone, aisle: d.aisle, section: d.section, orient: f.orient, siteId: s.id }; });
+      EC.recordPush(f.devices.map((d) => d.serial), signOpts(), meta);
+      haptic(); f.wakeIdx = 0; f.wakeSlide = 0; return setStep("wake");
+    }
+    if (f.step === "wake") EC.markWoken(f.devices[f.wakeIdx].serial);
     if (f.step === "wake" && f.wakeIdx < n - 1) { f.wakeIdx++; f.wakeSlide = 0; save(); render(); return; }
     if (f.step === "wake") { const last = f.devices[n - 1] || {}; f.lastZone = last.zone || ""; f.lastAisle = last.aisle || ""; }
     if (f.step === "scan") f.locIdx = 0;

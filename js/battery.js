@@ -60,12 +60,12 @@
           <section class="caption" id="caption" aria-live="polite"></section>
         </div>
         <nav class="flow-nav" id="donebar" hidden>
-          ${f.returnTo === "install"
-            ? `<button class="btn" id="to-install" style="grid-column:1/-1">Back to Install</button>`
+          ${f.returnTo
+            ? `<button class="btn" id="to-install" style="grid-column:1/-1">${f.returnTo === "content" ? "Back to Update Content" : "Back to Install"}</button>`
             : `<button class="btn ghost" id="again">Swap another</button>
           <button class="btn" id="home">Home</button>`}
         </nav>
-        ${f.returnTo === "install" ? `<div style="padding:0 16px 12px"><button class="btn ghost" id="to-install-now">Back to Install</button></div>` : ""}
+        ${f.returnTo ? `<div style="padding:0 16px 12px"><button class="btn ghost" id="to-install-now">${f.returnTo === "content" ? "Back to Update Content" : "Back to Install"}</button></div>` : ""}
       </div>
     </main>`;
   bindHeader();
@@ -142,7 +142,7 @@
   $("again")?.addEventListener("click", () => { $("post").scrollTop = 0; goTo(0, false); });
   $("home")?.addEventListener("click", () => { delete state.flows.battery; go("home"); });
   // opened from Install: return there (both the always-visible link and the last-step button)
-  const backToInstall = () => { delete state.flows.battery; go("install"); };
+  const backToInstall = () => { const to = f.returnTo || "install"; delete state.flows.battery; go(to); };
   $("to-install")?.addEventListener("click", backToInstall);
   $("to-install-now")?.addEventListener("click", backToInstall);
 
