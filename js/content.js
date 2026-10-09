@@ -88,9 +88,13 @@
       case "find": return f.sel.length > 0;
       case "type": return !!f.type;
       case "details": { const t = typeOf(); return !!(f.desc.trim() && f.priceC && f.uom && (!sizeNeeded() || f.size.trim()) && (!t || !t.was || f.wasC)); }
+      case "preview": return pv.canPush(previewKey());
       default: return true;
     }
   }
+  /* preview build (js/preview.js): Push Content stays locked until it's back; 30 s limit */
+  const pv = ECPreview.controller(() => { if (f.step === "preview") render(); });
+  const previewKey = () => JSON.stringify(signOpts());
   const nextLabel = () => ({
     find: f.sel.length > 1 ? `Update ${f.sel.length} displays` : "Continue",
     current: "Change the sign",
@@ -160,7 +164,7 @@
   /* ---------- scanner (same behavior as Install: tap to start, keeps scanning, wrong codes shake) ---------- */
   const norm = (v) => String(v).toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, SERIAL_LEN);
   const isSerialShape = (v) => new RegExp(`^[0-9A-Z]{${SERIAL_LEN}}$`).test(v);
-  const ZXING_URL = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";
+  const ZXING_URL = "lib/zxing.min.js"; // bundled (Apache-2.0) so iPhone scanning works offline
   const scanner = {
     state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, last: { v: "", t: 0 },
     async start() {
@@ -327,12 +331,6 @@
   function body() {
     switch (f.step) {
       case "find": return `
-        <div class="scanner" id="scanner" data-state="idle">
-          <button class="viewfinder" id="vf" aria-label="Start camera and scan a display"><span class="vf-frame"></span><span class="vf-hint">${I.scan.replace("<svg", '<svg style="width:28px;height:28px"')}Tap to scan</span></button>
-          <div class="cam"><video id="scan-video" playsinline muted></video><span class="vf-frame"></span><span class="scanline"></span><button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button></div>
-          <div class="cam-fail"><strong>Camera unavailable</strong><span class="note">Type the ID or pick from the list.</span><button class="btn ghost" id="cam-retry">Try again</button></div>
-          <div class="cam-state" aria-live="polite"><i></i><span id="cam-msg"></span></div>
-        </div>
         <div class="serial-field"><input class="input" id="serial" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Display ID" placeholder="Or type the display ID" /><span class="len" id="len">0/${SERIAL_LEN}</span></div>
         <div id="scan-reject"></div>
         <div class="sel-bar" id="sel-bar"></div>
@@ -378,7 +376,7 @@
             <span class="field-note" id="was-note">${f.wasC ? "Moved from the current price. Change it if needed." : ""}</span></div>` : ""}`;
       }
 
-      case "preview": return `${eSign()}<p class="note" style="margin:0">${f.sel.length > 1 ? `Sending to ${f.sel.length} displays.` : `Sending to ${esc(loc(selected()[0]))}.`}</p>`;
+      case "preview": return `${pv.ready(previewKey()) ? eSign() + (navigator.onLine ? "" : `<div class="offline-note" role="status"><span>Offline. Push Content needs a connection.</span></div>`) : pv.html(previewKey(), selOrient() || "landscape")}<p class="note" style="margin:0">${f.sel.length > 1 ? `Sending to ${f.sel.length} displays.` : `Sending to ${esc(loc(selected()[0]))}.`}</p>`;
 
       case "wake": return `
         <div class="wake-post">
@@ -407,6 +405,16 @@
     document.querySelectorAll("[data-rewake]").forEach((b) => b.onclick = () => { f.sel = [b.dataset.rewake]; f.wakeOnly = true; f.wakeIdx = 0; f.wakeSlide = 0; setStep("wake"); });
   }
 
+  /* camera window at the very top, right under the phone's own camera */
+  const scanBlock = () => `<div class="scan-top">
+        <div class="scanner" id="scanner" data-state="idle">
+          <button class="viewfinder" id="vf" aria-label="Start camera and scan a display"><span class="vf-frame"></span><span class="vf-hint">${I.scan.replace("<svg", '<svg style="width:28px;height:28px"')}Tap to scan again</span></button>
+          <div class="cam"><video id="scan-video" playsinline muted></video><span class="vf-frame"></span><span class="scanline"></span><button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button></div>
+          <div class="cam-fail"><strong>Camera unavailable</strong><span class="note">Type the ID or pick from the list.</span><button class="btn ghost" id="cam-retry">Try again</button></div>
+          <div class="cam-state" aria-live="polite"><i></i><span id="cam-msg"></span></div>
+        </div>
+      </div>`;
+
   /* ---------- render ---------- */
   let ticker = 0;
   function render() {
@@ -418,6 +426,7 @@
       <main class="screen" style="--tint:var(--tint-content)">
         ${header({ home: true })}
         <div class="flow">
+          ${f.step === "find" ? scanBlock() : ""}
           <div class="flow-top">
             <div class="flow-name"><span class="kicker">Update Content</span><span class="count">${f.step === "done" ? "Done" : `${i + 1} / ${total}`}</span></div>
             <div class="progress">${STEPS.slice(0, total).map((_, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}"></i>`).join("")}</div>
@@ -473,6 +482,7 @@
       $("vf").onclick = () => scanner.start();
       $("cam-retry").onclick = () => scanner.start();
       $("cam-cancel").onclick = () => scanner.stop();
+      setTimeout(() => scanner.start(), 0); // the camera opens with the screen
       paintFind();
     }
     $("wake-only")?.addEventListener("click", () => {
@@ -506,6 +516,8 @@
       if (n) { const p = centsToNum(f.priceC), w = centsToNum(f.wasC); n.textContent = p !== null && w !== null && w <= p ? "Was price is not higher than the price. Check both." : n.textContent.startsWith("Was price is not") ? "" : n.textContent; n.classList.toggle("warn", p !== null && w !== null && w <= p); }
       save(); refreshNext();
     }));
+
+    if (f.step === "preview") { const key = previewKey(); pv.ensure(key); $("pv-retry")?.addEventListener("click", () => pv.retry(key)); }
 
     bindWake();
 

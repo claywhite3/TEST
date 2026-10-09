@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const BUILD = "v0.5.0 · 2026-10-09";
+  const BUILD = "v0.6.1 · 2026-10-09";
 
   /* ---------- fixtures ----------
      Trap cases are deliberate (principle 55). Don't tidy them:
@@ -33,34 +33,34 @@
   const MODEL = { name: "Engage MediaBoard 32W", input: "DC 14.8V 1A", pack: "Li-ion 14.8V 2600mAh 38.48Wh" };
 
   const DEVICES = [
-    { serial: "193205A4B0091", siteId: "5624", location: "Front entrance · Left", battery: 8, behavior: "ok" },
-    { serial: "193205A4B0107", siteId: "5624", location: "Aisle 12 · Endcap", battery: 14, behavior: "ok" },
-    { serial: "193205A4B0112", siteId: "5624", location: "Pharmacy · Counter", battery: 31, behavior: "silent" },
-    { serial: "193205A4B0230", siteId: "5642", location: "Grocery · Produce", battery: 22, behavior: "ok" },
-    { serial: "193205A4B0301", siteId: "CEC-DAL", location: "Demo wall · Bay 2", battery: 11, behavior: "ok" },
-    { serial: "193205A4B0302", siteId: "CEC-DAL", location: "Demo wall · Bay 3", battery: 47, behavior: "silent" },
-    { serial: "193205A4B0410", siteId: "0100", location: "Electronics · Endcap", battery: 5, behavior: "ok" },
-    { serial: "193205A4B0520", siteId: "0359", location: "Main entrance · Right", battery: 18, behavior: "ok" },
-    { serial: "193205A4B0611", siteId: "3305", location: "Seasonal · Front", battery: 9, behavior: "ok" },
-    { serial: "193205A4B0712", siteId: "LAB-FAR", location: "Bench · Slot A", battery: 3, behavior: "ok" },
+    { serial: "EGDA0091", siteId: "5624", location: "Front entrance · Left", battery: 8, behavior: "ok" },
+    { serial: "EGDA0107", siteId: "5624", location: "Aisle 12 · Endcap", battery: 14, behavior: "ok" },
+    { serial: "EGDA0112", siteId: "5624", location: "Pharmacy · Counter", battery: 31, behavior: "silent" },
+    { serial: "EGDA0230", siteId: "5642", location: "Grocery · Produce", battery: 22, behavior: "ok" },
+    { serial: "EGDA0301", siteId: "CEC-DAL", location: "Demo wall · Bay 2", battery: 11, behavior: "ok" },
+    { serial: "EGDA0302", siteId: "CEC-DAL", location: "Demo wall · Bay 3", battery: 47, behavior: "silent" },
+    { serial: "EGDA0410", siteId: "0100", location: "Electronics · Endcap", battery: 5, behavior: "ok" },
+    { serial: "EGDA0520", siteId: "0359", location: "Main entrance · Right", battery: 18, behavior: "ok" },
+    { serial: "EGDA0611", siteId: "3305", location: "Seasonal · Front", battery: 9, behavior: "ok" },
+    { serial: "EGDA0712", siteId: "LAB-FAR", location: "Bench · Slot A", battery: 3, behavior: "ok" },
   ];
-  const SERIAL_LEN = 13;
+  const SERIAL_LEN = 8; // bezel display ID: 8 alphanumeric characters (spec). The 13-char serial on the rear label is a different number.
 
   /* ---------- fleet: what each display shows and where it hangs ----------
      Seed signs for the Update flow. Location is Zone (letters) + Aisle + Section, shown as A15-1.
      Trap cases (principle 55): …0112 never connects after a push (goes Not confirmed);
      A16-2 was pushed 2 min ago and is still waiting for a wake; GM102-4 is portrait (can't be batched with landscape). */
   const SEED = {
-    "193205A4B0091": { zone: "A", aisle: "15", section: "1", orient: "landscape", ago: 600, sign: { type: "edlp", priceC: "212", uom: "lb", desc: "Tomatoes on the Vine", plu: "4664", img: "assets/products/tomatoes-on-vine.png" } },
-    "193205A4B0107": { zone: "A", aisle: "15", section: "2", orient: "landscape", ago: 600, sign: { type: "rollback", priceC: "119", wasC: "129", uom: "lb", desc: "Navel Oranges", plu: "4013", img: "assets/products/navel-oranges.png" } },
-    "193205A4B0112": { zone: "A", aisle: "16", section: "1", orient: "landscape", ago: 30, sign: { type: "edlp", priceC: "58", uom: "lb", desc: "Bananas", plu: "4011", img: "assets/products/bananas.png" } },
-    "193205A4B0118": { zone: "A", aisle: "16", section: "2", orient: "landscape", ago: 2, pending: true, sign: { type: "manager", priceC: "67", wasC: "97", uom: "ea", desc: "Hass Avocados", plu: "4225", img: "assets/products/hass-avocados.png" } },
-    "193205A4B0124": { zone: "B", aisle: "3", section: "1", orient: "landscape", ago: 900, sign: { type: "clearance", priceC: "212", wasC: "348", uom: "lb", desc: "Pie Pumpkins", plu: "3134", img: "assets/products/pie-pumpkins.png" } },
-    "193205A4B0131": { zone: "GM", aisle: "102", section: "4", orient: "portrait", ago: 900, sign: { type: "rollback", priceC: "147", wasC: "198", uom: "lb", desc: "Red Delicious Apples", plu: "4016", img: "assets/products/red-delicious-apples.png" } },
+    "EGDA0091": { zone: "A", aisle: "15", section: "1", orient: "landscape", ago: 600, sign: { type: "edlp", priceC: "212", uom: "lb", desc: "Tomatoes on the Vine", plu: "4664", img: "assets/products/tomatoes-on-vine.png" } },
+    "EGDA0107": { zone: "A", aisle: "15", section: "2", orient: "landscape", ago: 600, sign: { type: "rollback", priceC: "119", wasC: "129", uom: "lb", desc: "Navel Oranges", plu: "4013", img: "assets/products/navel-oranges.png" } },
+    "EGDA0112": { zone: "A", aisle: "16", section: "1", orient: "landscape", ago: 30, sign: { type: "edlp", priceC: "58", uom: "lb", desc: "Bananas", plu: "4011", img: "assets/products/bananas.png" } },
+    "EGDA0118": { zone: "A", aisle: "16", section: "2", orient: "landscape", ago: 2, pending: true, sign: { type: "manager", priceC: "67", wasC: "97", uom: "ea", desc: "Hass Avocados", plu: "4225", img: "assets/products/hass-avocados.png" } },
+    "EGDA0124": { zone: "B", aisle: "3", section: "1", orient: "landscape", ago: 900, sign: { type: "clearance", priceC: "212", wasC: "348", uom: "lb", desc: "Pie Pumpkins", plu: "3134", img: "assets/products/pie-pumpkins.png" } },
+    "EGDA0131": { zone: "GM", aisle: "102", section: "4", orient: "portrait", ago: 900, sign: { type: "rollback", priceC: "147", wasC: "198", uom: "lb", desc: "Red Delicious Apples", plu: "4016", img: "assets/products/red-delicious-apples.png" } },
   };
-  DEVICES.push({ serial: "193205A4B0118", siteId: "5624", battery: 40, behavior: "ok" },
-               { serial: "193205A4B0124", siteId: "5624", battery: 52, behavior: "ok" },
-               { serial: "193205A4B0131", siteId: "5624", battery: 61, behavior: "ok" });
+  DEVICES.push({ serial: "EGDA0118", siteId: "5624", battery: 40, behavior: "ok" },
+               { serial: "EGDA0124", siteId: "5624", battery: 52, behavior: "ok" },
+               { serial: "EGDA0131", siteId: "5624", battery: 61, behavior: "ok" });
 
   const NOT_CONFIRMED_MIN = 7;   // no Wi-Fi connection this long after a push → Not confirmed
   const CONNECT_DEMO_SEC = 25;   // prototype only: a woken display "connects" this long after its push
@@ -68,9 +68,10 @@
   /* ---------- session state (shared across pages) ---------- */
   const KEY = "engage-companion";
   let state;
-  try { state = JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { state = {}; }
+  // localStorage, not sessionStorage: an installed app is closed and reopened all day; progress must survive that
+  try { state = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { state = {}; }
   state = Object.assign({ user: null, chainId: "WMT", siteId: null, flows: {} }, state);
-  const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
 
   const allSites = () => CHAINS.flatMap((c) => c.sites.map((s) => ({ ...s, chainId: c.id, chain: c.name })));
   const site = (id = state.siteId) => allSites().find((s) => s.id === id) || null;
@@ -201,6 +202,52 @@
     });
     el.querySelector("#sheet-out").focus();
   }
+
+  /* ---------- installed-app plumbing ----------
+     Service worker (sw.js) caches everything so the app opens instantly and offline.
+     Strips: "Offline" while there's no connection; "New version" when a new build is ready. */
+  function strip(kind, html) {
+    let el = document.querySelector(".app-strip." + kind);
+    if (!html) { if (el) el.remove(); return null; }
+    if (!el) { el = document.createElement("div"); el.className = "app-strip " + kind; el.setAttribute("role", "status"); document.body.appendChild(el); }
+    el.innerHTML = html;
+    return el;
+  }
+  const paintOnline = () => strip("offline", navigator.onLine ? "" : "<span>Offline · You can look things up. Pushing a sign needs a connection.</span>");
+  addEventListener("online", paintOnline);
+  addEventListener("offline", paintOnline);
+  addEventListener("DOMContentLoaded", paintOnline);
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").then((reg) => {
+        const offer = (w) => {
+          const el = strip("update", '<span>New version available</span><button type="button">Reload</button>');
+          el.querySelector("button").onclick = () => w.postMessage("skip-waiting");
+        };
+        if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
+        reg.addEventListener("updatefound", () => {
+          const w = reg.installing;
+          w && w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) offer(w); });
+        });
+      }).catch(() => { /* not available here (preview sandbox): the app still works online */ });
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    });
+  }
+
+  /* iPhone has no install prompt: one-time hint in Safari (not once installed) */
+  addEventListener("load", () => {
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+    let seen = false; try { seen = localStorage.getItem("ec-ios-hint") === "1"; } catch { /* ignore */ }
+    if (!ios || standalone || seen) return;
+    const el = document.createElement("div");
+    el.className = "ios-hint"; el.setAttribute("role", "note");
+    el.innerHTML = '<span><b>Install Engage Companion</b>Tap Share, then Add to Home Screen. It opens faster and works offline.</span><button type="button">Got it</button>';
+    el.querySelector("button").onclick = () => { try { localStorage.setItem("ec-ios-hint", "1"); } catch { /* ignore */ } el.remove(); };
+    document.body.appendChild(el);
+  });
 
   window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, locCode, NOT_CONFIRMED_MIN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
 })();

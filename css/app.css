@@ -1,3 +1,12 @@
+/* Fonts are bundled (fonts/) so the app opens offline. Figtree + JetBrains Mono: SIL OFL. */
+@font-face { font-family: "Figtree"; font-weight: 400; font-display: swap; src: url("../fonts/figtree-400.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 500; font-display: swap; src: url("../fonts/figtree-500.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 600; font-display: swap; src: url("../fonts/figtree-600.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 700; font-display: swap; src: url("../fonts/figtree-700.woff2") format("woff2"); }
+@font-face { font-family: "Figtree"; font-weight: 800; font-display: swap; src: url("../fonts/figtree-800.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 500; font-display: swap; src: url("../fonts/jetbrains-mono-500.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url("../fonts/jetbrains-mono-700.woff2") format("woff2"); }
+
 /* Engage Companion — phone-width single column; header + content; home = 3 equal rows (2 major, 1 split). */
 :root {
   --bg: #f5f7fb;
@@ -645,3 +654,36 @@ details.demo .chip-row { margin-top: 8px; }
 .btn.small { height: 44px; margin-top: 10px; font-size: 15px; }
 /* long steps scroll; their parts keep their size instead of squeezing */
 .step > * { flex-shrink: 0; }
+
+/* preview build: placeholder while the sign is built (≤30 s) */
+.pv-build { display: flex; flex-direction: column; gap: 10px; }
+.pv-ghost { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 6px; background: #1a1b1e; box-shadow: 0 0 0 6px var(--hw-frame); margin: 6px 0; }
+.pv-build[data-o="portrait"] .pv-ghost { aspect-ratio: 9 / 16; width: 62%; align-self: center; }
+.pv-band { position: absolute; left: 0; right: 0; top: 0; height: 25%; background: #2a2c31; }
+.pv-build[data-o="portrait"] .pv-band { height: 19%; }
+.pv-shine { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.10) 50%, transparent 70%); animation: shine 1.4s linear infinite; }
+@keyframes shine { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.pv-line { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+.pv-line > span:nth-child(2) { flex: 1; }
+.pv-spin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--tint); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pv-fail { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: var(--r-card); background: var(--bad-soft); }
+
+/* offline + new-version strips (core.js) */
+.app-strip { position: fixed; left: 0; right: 0; top: 0; z-index: 40; display: flex; align-items: center; justify-content: center; gap: 10px; padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; font-weight: 700; font-size: 13px; text-align: center; }
+.app-strip.offline { background: var(--fg); color: var(--bg); }
+.app-strip.update { background: var(--accent); color: var(--accent-ink); }
+.app-strip button { border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 800; background: var(--bg); color: var(--fg); }
+.offline-note { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--r-ctl); background: var(--surface-2); font-weight: 600; }
+.offline-note svg { width: 18px; height: 18px; color: var(--fg-2); flex: none; }
+.ios-hint { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 41; display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: 0 8px 30px rgba(0,0,0,.25); font-size: 14px; line-height: 1.35; }
+.ios-hint b { display: block; font-size: 15px; }
+.ios-hint button { margin-left: auto; border: 0; background: none; font-weight: 800; color: var(--accent); padding: 4px; }
+
+/* scan screens: the camera window sits at the very top, edge to edge, right under the phone's camera */
+.scan-top { flex: none; background: var(--hw-frame); }
+.scan-top .scanner { gap: 0; }
+.scan-top .viewfinder, .scan-top .cam { border-radius: 0; height: 38vh; min-height: 220px; max-height: 360px; }
+.scan-top .viewfinder { padding: 0; }
+.scan-top .cam-fail { border-radius: 0; min-height: 160px; justify-content: center; }
+.scan-top .cam-state { padding: 8px 16px; color: #c9ced6; background: var(--hw-frame); }

@@ -32,7 +32,7 @@
 
   const STEPS = ["battery", "orient", "scan", "location", "type", "details", "preview", "wake", "done"];
   const COPY = {
-    battery: ["Is the battery in?", "Displays ship without the battery installed."],
+    battery: ["Insert the battery", "Displays ship without it. Swipe through the steps. Already in? Tap Battery is in."],
     orient: ["Which way does the display hang?", "Pick this before you scan."],
     scan: ["Scan the display", "Scan the barcode on the bezel."],
     location: ["Where is this display?", "Type the location as it’s labeled in the store."],
@@ -51,8 +51,19 @@
     { art: "update", title: "The sign updates", lines: ["The screen changes in 3–5 minutes.", "You don’t need to wait."] },
   ];
 
+  /* Insert the battery: swipe through in place (same pictures as Swap Battery, no old pack to remove) */
+  const R = (o) => ECArt.rear(o);
+  const INSERT = [
+    { art: () => ECArt.rearOverview(), title: "Find the access panel", lines: ["Turn the display so you face its back.", "The access panel is the tall plate on the left side."] },
+    { art: () => R({ screw: "out", focus: "screw", motion: "unscrew" }), title: "Remove the screw", lines: ["Use a #2 Phillips screwdriver.", "Turn the screw counter-clockwise until it comes free.", "Keep the screw. The panel has only one."] },
+    { art: () => R({ cover: "tilt", screw: "none", motion: "tilt" }), title: "Remove the panel", lines: ["Swing the top of the panel away from the display.", "Lift it up and out of the slot at the bottom."] },
+    { art: () => R({ cover: "set-aside", screw: "none", plug: "apart", kind: "new", focus: "plug", motion: "plugUp" }), title: "Plug in the battery", lines: ["Slide the battery in behind the side clip, label facing out.", "Push its plug onto the display plug.", "Push until no metal shows at the joint."] },
+    { art: () => R({ cover: "tilt", screw: "none", motion: "hook" }), title: "Replace the panel", lines: ["Hook the bottom tab of the panel into the slot.", "Swing the panel flat against the display."] },
+    { art: () => R({ cover: "on", screw: "out", focus: "screw", motion: "screwIn" }), title: "Replace the screw", lines: ["Turn the screw clockwise until snug.", "Do not overtighten."] },
+  ];
+
   const fresh = () => ({
-    v: FLOW_V, step: "battery", orient: "landscape", multi: false, devices: [], locIdx: 0, wakeIdx: 0, wakeSlide: 0,
+    v: FLOW_V, step: "battery", battSlide: 0, orient: "landscape", multi: false, devices: [], locIdx: 0, wakeIdx: 0, wakeSlide: 0,
     type: null, desc: "", plu: "", img: "", priceC: "", size: "", uom: "", wasC: "", lastZone: "", lastAisle: "", reject: null,
   });
   let f = state.flows.install;
@@ -103,9 +114,13 @@
         const t = typeOf();
         return !!(f.desc.trim() && f.priceC && f.uom && (!sizeNeeded() || f.size.trim()) && (!t || !t.was || f.wasC));
       }
+      case "preview": return pv.canPush(previewKey());
       default: return true;
     }
   }
+  /* preview build (js/preview.js): Push Content stays locked until it's back; 30 s limit */
+  const pv = ECPreview.controller(() => { if (f.step === "preview") render(); });
+  const previewKey = () => JSON.stringify(signOpts());
   const nextLabel = () => ({
     battery: "Battery is in",
     location: f.locIdx < f.devices.length - 1 ? "Next display" : "Continue",
@@ -186,7 +201,7 @@
      BarcodeDetector where the browser has it (Chrome/Android), ZXing from the CDN otherwise (iOS Safari).
      Tap = start (principle 6). Single: valid code → stop, haptic, fill (11). Multi: fill and keep scanning.
      Wrong shape → shake, keep scanning (10). Camera released on every exit (12, 13). */
-  const ZXING_URL = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";
+  const ZXING_URL = "lib/zxing.min.js"; // bundled (Apache-2.0) so iPhone scanning works offline
   const scanner = {
     state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, last: { v: "", t: 0 }, torch: false,
     async start() {
@@ -364,8 +379,8 @@
   function body() {
     switch (f.step) {
       case "battery": return `
-        <div class="stage" style="background:var(--card-install)">${ECArt.rear({ cover: "set-aside", screw: "none", plug: "apart", kind: "new", focus: "plug" })}</div>
-        <button class="btn ghost" id="guide">Show me how</button>`;
+        <div class="safety-pin" role="note">${I.warn}<span>Li-ion pack. Keep metal off the plug tips. Swollen or hot pack: stop.</span></div>
+        ${carousel(INSERT, "Insert the battery")}`;
 
       case "orient": return `
         <div class="orient-list" role="radiogroup" aria-label="Display orientation">
@@ -388,24 +403,6 @@
         <button class="switch-row" id="multi" aria-pressed="${f.multi}">
           <span>Same content on multiple displays</span><span class="switch" aria-hidden="true"><i></i></span>
         </button>
-        <div class="scanner" id="scanner" data-state="idle">
-          <button class="viewfinder" id="vf" aria-label="Start camera and scan the bezel barcode">
-            <span class="vf-frame"></span>
-            <span class="vf-hint">${I.scan.replace("<svg", '<svg style="width:28px;height:28px"')}Tap to scan</span>
-          </button>
-          <div class="cam">
-            <video id="scan-video" playsinline muted></video>
-            <span class="vf-frame"></span><span class="scanline"></span>
-            <button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button>
-            <button class="cam-btn torch" id="torch" aria-label="Flashlight" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3h8l-2 6h-4z"/><path d="M10 9v11h4V9"/></svg></button>
-          </div>
-          <div class="cam-fail">
-            <strong>Camera unavailable</strong>
-            <span class="note">Type the ID in the list, or try again.</span>
-            <button class="btn ghost" id="cam-retry">Try again</button>
-          </div>
-          <div class="cam-state" aria-live="polite"><i></i><span id="cam-msg"></span></div>
-        </div>
         <div id="scan-reject"></div>
         <div class="slots">
           <span class="section-label" id="slots-label" style="font-size:15px;margin:0"></span>
@@ -454,21 +451,14 @@
 
       case "preview": {
         const n = f.devices.length;
+        const key = previewKey();
         return `
-          ${eSign()}
+          ${pv.ready(key) ? eSign() + (navigator.onLine ? "" : `<div class="offline-note" role="status"><span>Offline. Push Content needs a connection.</span></div>`) : pv.html(key, f.orient)}
           <p class="note" style="margin:0">${n > 1 ? `Sending to ${n} displays.` : `Sending to ${esc(f.devices[0] ? f.devices[0].serial : "")}.`}</p>`;
       }
 
       case "wake": return `
-        <div class="wake-post">
-          <div class="carousel" id="track" tabindex="0" aria-roledescription="carousel" aria-label="Wake the display">
-            ${WAKE.map((w, i) => `<div class="slide" aria-label="Step ${i + 1} of ${WAKE.length}">${ECArt.wake(w.art)}</div>`).join("")}
-          </div>
-          <div class="dots" role="tablist" aria-label="Steps">
-            ${WAKE.map((w, i) => `<button class="dot" role="tab" data-i="${i}" aria-label="Step ${i + 1}: ${esc(w.title)}"></button>`).join("")}
-          </div>
-          <section class="caption" id="caption" aria-live="polite"></section>
-        </div>
+        ${carousel(WAKE.map((w) => Object.assign({}, w, { art: () => ECArt.wake(w.art) })), "Wake the display")}
         <button class="hint-row" id="no-light">${I.warn}<span>No light? Check the battery</span>${I.next}</button>`;
 
       case "done": return `
@@ -484,6 +474,28 @@
     return "";
   }
 
+  /* camera window: drawn at the very top of the screen, right under the phone's own camera */
+  const scanBlock = () => `<div class="scan-top">
+        <div class="scanner" id="scanner" data-state="idle">
+          <button class="viewfinder" id="vf" aria-label="Start camera and scan the bezel barcode">
+            <span class="vf-frame"></span>
+            <span class="vf-hint">${I.scan.replace("<svg", '<svg style="width:28px;height:28px"')}Tap to scan again</span>
+          </button>
+          <div class="cam">
+            <video id="scan-video" playsinline muted></video>
+            <span class="vf-frame"></span><span class="scanline"></span>
+            <button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button>
+            <button class="cam-btn torch" id="torch" aria-label="Flashlight" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3h8l-2 6h-4z"/><path d="M10 9v11h4V9"/></svg></button>
+          </div>
+          <div class="cam-fail">
+            <strong>Camera unavailable</strong>
+            <span class="note">Type the ID in the list, or try again.</span>
+            <button class="btn ghost" id="cam-retry">Try again</button>
+          </div>
+          <div class="cam-state" aria-live="polite"><i></i><span id="cam-msg"></span></div>
+        </div>
+      </div>`;
+
   /* ---------- render ---------- */
   const app = $("app");
   function render() {
@@ -496,6 +508,7 @@
       <main class="screen" style="--tint:var(--tint-install)">
         ${header({ home: true })}
         <div class="flow">
+          ${f.step === "scan" ? scanBlock() : ""}
           <div class="flow-top">
             <div class="flow-name"><span class="kicker">Install</span><span class="count">${f.step === "done" ? "Done" : `${i + 1} / ${total}`}</span></div>
             <div class="progress">${STEPS.slice(0, total).map((_, k) => `<i class="${k < i ? "done" : k === i ? "now" : ""}"></i>`).join("")}</div>
@@ -518,23 +531,38 @@
   }
   function refreshNext() { const b = $("next"); if (b) { b.disabled = !valid(); b.textContent = nextLabel(); } }
 
-  /* wake carousel: swipe the picture, dots under it, caption follows (same pattern as Swap Battery) */
+  /* swipe carousel (battery + wake): the picture swipes, dots under it, caption follows — same pattern as Swap Battery */
+  function carousel(steps, label) {
+    return `
+        <div class="wake-post">
+          <div class="carousel" id="track" tabindex="0" aria-roledescription="carousel" aria-label="${esc(label)}">
+            ${steps.map((w, i) => `<div class="slide" aria-label="Step ${i + 1} of ${steps.length}">${w.art()}</div>`).join("")}
+          </div>
+          <div class="dots" role="tablist" aria-label="Steps">
+            ${steps.map((w, i) => `<button class="dot" role="tab" data-i="${i}" aria-label="Step ${i + 1}: ${esc(w.title)}"></button>`).join("")}
+          </div>
+          <section class="caption" id="caption" aria-live="polite"></section>
+        </div>`;
+  }
   function bindWake() {
     const track = $("track");
     if (!track) return;
+    const STEPS_ = f.step === "battery" ? INSERT : WAKE;
+    const field = f.step === "battery" ? "battSlide" : "wakeSlide";
+    const WAKE_ = STEPS_;
     const dots = [...document.querySelectorAll(".dot")];
-    let idx = Math.min(f.wakeSlide || 0, WAKE.length - 1);
+    let idx = Math.min(f[field] || 0, WAKE_.length - 1);
     const paint = () => {
-      const w = WAKE[idx];
+      const w = WAKE_[idx];
       dots.forEach((d, k) => d.setAttribute("aria-selected", String(k === idx)));
-      $("caption").innerHTML = `<span class="step-no">Step ${idx + 1} of ${WAKE.length}</span><h2>${esc(w.title)}</h2>
+      $("caption").innerHTML = `<span class="step-no">Step ${idx + 1} of ${WAKE_.length}</span><h2>${esc(w.title)}</h2>
         <ul class="lines">${w.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
         ${idx === 0 ? `<p class="swipe-hint">Swipe the picture for the next step</p>` : ""}`;
-      f.wakeSlide = idx; save();
+      f[field] = idx; save();
     };
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const goTo = (k, smooth = true) => {
-      idx = Math.max(0, Math.min(WAKE.length - 1, k));
+      idx = Math.max(0, Math.min(WAKE_.length - 1, k));
       track.scrollTo({ left: idx * track.clientWidth, behavior: smooth && !reduce ? "smooth" : "auto" });
       paint();
     };
@@ -544,7 +572,7 @@
       requestAnimationFrame(() => {
         ticking = false;
         const k = Math.round(track.scrollLeft / track.clientWidth);
-        if (k !== idx && k >= 0 && k < WAKE.length) { idx = k; paint(); }
+        if (k !== idx && k >= 0 && k < WAKE_.length) { idx = k; paint(); }
       });
     }, { passive: true });
     let drag = null;
@@ -584,6 +612,8 @@
     // scanner + slots
     if ($("scanner")) { scanner.paint("idle"); paintSlots(); }
     $("vf")?.addEventListener("click", () => scanner.start());
+    // the camera opens with the screen: no extra tap (single mode with a display already in: wait for a tap)
+    if (f.step === "scan" && (f.multi || !f.devices.length)) setTimeout(() => scanner.start(), 0);
     $("cam-retry")?.addEventListener("click", () => scanner.start());
     $("cam-cancel")?.addEventListener("click", () => scanner.stop());
     $("multi")?.addEventListener("click", () => {
@@ -654,6 +684,8 @@
       save(); checkWas(); refreshNext();
     }));
     checkWas();
+
+    if (f.step === "preview") { const key = previewKey(); pv.ensure(key); $("pv-retry")?.addEventListener("click", () => pv.retry(key)); }
 
     bindWake();
 
