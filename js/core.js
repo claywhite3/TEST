@@ -1,0 +1,139 @@
+/* Engage Companion — shared core: build stamp, fixtures, session state, navigation, header, icons.
+   Every page loads this first, then js/art.js, then its own page script. */
+(function () {
+  "use strict";
+
+  const BUILD = "v0.4.7 · 2026-10-09";
+
+  /* ---------- fixtures ----------
+     Trap cases are deliberate (principle 55). Don't tidy them:
+     #4108 has 0 displays · #0359 has a very long name · #5624 / #5642 near-duplicate IDs
+     Serial …0112 never checks in after a swap · …0230 is registered to a different site · …9999 is unregistered */
+  const CHAINS = [
+    {
+      id: "WMT", name: "Walmart",
+      sites: [
+        { id: "5624", name: "Walmart #5624", city: "Dallas, TX", displays: 48 },
+        { id: "5642", name: "Walmart #5642", city: "Garland, TX", displays: 36 },
+        { id: "0100", name: "Walmart #0100", city: "Bentonville, AR", displays: 12 },
+        { id: "4108", name: "Walmart #4108", city: "Rogers, AR", displays: 0 },
+        { id: "0359", name: "Walmart Supercenter #0359 — Fayetteville Martin Luther King Jr Blvd", city: "Fayetteville, AR", displays: 64 },
+        { id: "3305", name: "Walmart #3305", city: "Springdale, AR", displays: 22 },
+      ],
+    },
+    {
+      id: "VGL", name: "VusionGroup Labs",
+      sites: [
+        { id: "CEC-DAL", name: "Dallas CEC", city: "Dallas, TX", displays: 9 },
+        { id: "LAB-FAR", name: "Farmington Bench", city: "Farmington, AR", displays: 3 },
+      ],
+    },
+  ];
+
+  const MODEL = { name: "Engage MediaBoard 32W", input: "DC 14.8V 1A", pack: "Li-ion 14.8V 2600mAh 38.48Wh" };
+
+  const DEVICES = [
+    { serial: "193205A4B0091", siteId: "5624", location: "Front entrance · Left", battery: 8, behavior: "ok" },
+    { serial: "193205A4B0107", siteId: "5624", location: "Aisle 12 · Endcap", battery: 14, behavior: "ok" },
+    { serial: "193205A4B0112", siteId: "5624", location: "Pharmacy · Counter", battery: 31, behavior: "silent" },
+    { serial: "193205A4B0230", siteId: "5642", location: "Grocery · Produce", battery: 22, behavior: "ok" },
+    { serial: "193205A4B0301", siteId: "CEC-DAL", location: "Demo wall · Bay 2", battery: 11, behavior: "ok" },
+    { serial: "193205A4B0302", siteId: "CEC-DAL", location: "Demo wall · Bay 3", battery: 47, behavior: "silent" },
+    { serial: "193205A4B0410", siteId: "0100", location: "Electronics · Endcap", battery: 5, behavior: "ok" },
+    { serial: "193205A4B0520", siteId: "0359", location: "Main entrance · Right", battery: 18, behavior: "ok" },
+    { serial: "193205A4B0611", siteId: "3305", location: "Seasonal · Front", battery: 9, behavior: "ok" },
+    { serial: "193205A4B0712", siteId: "LAB-FAR", location: "Bench · Slot A", battery: 3, behavior: "ok" },
+  ];
+  const SERIAL_LEN = 13;
+
+  /* ---------- session state (shared across pages) ---------- */
+  const KEY = "engage-companion";
+  let state;
+  try { state = JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { state = {}; }
+  state = Object.assign({ user: null, chainId: "WMT", siteId: null, flows: {} }, state);
+  const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
+
+  const allSites = () => CHAINS.flatMap((c) => c.sites.map((s) => ({ ...s, chainId: c.id, chain: c.name })));
+  const site = (id = state.siteId) => allSites().find((s) => s.id === id) || null;
+
+  /* ---------- navigation ---------- */
+  const PAGES = { login: "login.html", site: "site.html", home: "home.html", install: "install.html", content: "content.html", battery: "battery.html", trouble: "troubleshoot.html" };
+  const go = (page) => { save(); location.href = PAGES[page] || page; };
+
+  /** Redirect if prerequisites are missing. Returns false when it redirected. */
+  function guard({ auth = true, needSite = true } = {}) {
+    if (auth && !state.user) { location.replace(PAGES.login); return false; }
+    if (needSite && !site()) { location.replace(PAGES.site); return false; }
+    return true;
+  }
+
+  /* ---------- utils ---------- */
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const haptic = (ms = 30) => { try { navigator.vibrate && navigator.vibrate(ms); } catch { /* no vibration */ } };
+
+  /* ---------- icons ---------- */
+  const I = {
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 11l8-6.5 8 6.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/></svg>',
+    scan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 9v6M10 9v6M13 9v6M16 9v6"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1" fill="currentColor" stroke="none"/></svg>',
+    ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  };
+
+  /* ---------- header ----------
+     Home page: avatar + site pill (no home button — you're already home).
+     Every other signed-in page: avatar + site pill + home button. */
+  function header({ home = true } = {}) {
+    const s = site();
+    return `<header class="topbar">
+      <button class="avatar" id="who" aria-label="Account: ${esc(state.user.name)}">${esc(state.user.initials)}</button>
+      ${s ? `<button class="site-pill" id="change-site" aria-label="Change site, current ${esc(s.name)}">${I.pin}<span>${esc(s.name)}</span></button>` : `<span style="flex:1"></span>`}
+      ${home ? `<button class="icon-btn" id="go-home" aria-label="Home">${I.home}</button>` : ""}
+    </header>`;
+  }
+
+  function bindHeader() {
+    document.getElementById("change-site")?.addEventListener("click", () => go("site"));
+    document.getElementById("go-home")?.addEventListener("click", () => go("home"));
+    document.getElementById("who")?.addEventListener("click", accountSheet);
+  }
+
+  function sheet(inner, { label = "Panel" } = {}) {
+    const scrim = document.createElement("div");
+    scrim.className = "scrim";
+    scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(label)}"><span class="grabber"></span>${inner}</div>`;
+    const close = () => { scrim.dispatchEvent(new Event("close")); scrim.remove(); };
+    scrim.addEventListener("click", (e) => { if (e.target === scrim) close(); });
+    document.addEventListener("keydown", function onKey(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", onKey); } });
+    document.body.appendChild(scrim);
+    return { el: scrim, close };
+  }
+
+  function accountSheet() {
+    const { el, close } = sheet(`
+      <h3>Account</h3>
+      <div class="who">
+        <span class="avatar">${esc(state.user.initials)}</span>
+        <div><div style="font-weight:700">${esc(state.user.name)}</div><div class="em">${esc(state.user.email)}</div></div>
+      </div>
+      <button class="btn ghost" id="sheet-site">Change site</button>
+      <button class="btn" id="sheet-out">Sign out</button>
+      <div class="build-stamp">${BUILD}</div>`, { label: "Account" });
+    el.querySelector("#sheet-site").addEventListener("click", () => { close(); go("site"); });
+    el.querySelector("#sheet-out").addEventListener("click", () => {
+      close();
+      state.user = null; state.siteId = null; state.flows = {};
+      go("login");
+    });
+    el.querySelector("#sheet-out").focus();
+  }
+
+  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
+})();
