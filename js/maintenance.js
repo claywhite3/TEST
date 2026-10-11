@@ -54,35 +54,79 @@
     if (type === "stuck") return `<span class="note">Woke ${esc(ago(d.seenAt))}. Still showing the old sign.</span>`;
     return `<span class="note">Pushed ${esc(ago(d.pushedAt))}. Never connected.</span>`;
   }
+  /* issues by location: one row per display, a pill per problem; filter by type; zones collapse */
+  const PILL = {
+    dead: { word: "Dead battery", cls: "bad", issue: "battery", type: "battery", rank: 0 },
+    unconfirmed: { word: "Not confirmed", cls: "bad", issue: "unconfirmed", type: "sign", rank: 1 },
+    stuck: { word: "Woke, old sign", cls: "warn", issue: "stuck", type: "sign", rank: 2 },
+    low: { word: "Low battery", cls: "warn", issue: "battery", type: "battery", rank: 3 },
+  };
+  const FILTERS = [{ id: "all", word: "All" }, { id: "battery", word: "Battery" }, { id: "sign", word: "Sign" }];
+  function byDisplay() {
+    const m = {};
+    EC.issues().forEach(({ type, d }) => {
+      const k = type === "battery" ? (EC.battLevel(d.battery) === "bad" ? "dead" : "low") : type;
+      (m[d.serial] = m[d.serial] || { d, pills: [] }).pills.push(k);
+    });
+    return Object.values(m).map((x) => (x.pills.sort((a, b) => PILL[a].rank - PILL[b].rank), x));
+  }
   function listHtml() {
-    const all = EC.issues();
+    const all = byDisplay();
     if (!all.length) return `<div class="empty">Nothing to fix at this site right now.</div>`;
-    return ["battery", "stuck", "unconfirmed"].map((type) => {
-      const rows = all.filter((x) => x.type === type);
-      if (!rows.length) return "";
-      rows.sort((a, b) => (a.d.battery ?? 0) - (b.d.battery ?? 0));
-      return `<div class="fix-group">
-        <div class="fix-head"><b>${esc(EC.ISSUE[type].word)}</b><span class="fix-n">${rows.length}</span></div>
-        <p class="note" style="margin:0">${esc(ISSUE_NOTE[type])}</p>
-        ${rows.map(({ d }) => `<button class="fix-row" data-issue="${type}" data-sn="${d.serial}">
+    const flt = f.filter || "all";
+    const count = (id) => (id === "all" ? all.length : all.filter((x) => x.pills.some((p) => PILL[p].type === id)).length);
+    const shown = all.filter((x) => flt === "all" || x.pills.some((p) => PILL[p].type === flt));
+    const zones = {};
+    shown.forEach((x) => (zones[x.d.zone] = zones[x.d.zone] || []).push(x));
+    const n = (a, b) => Number(a) - Number(b);
+    return `
+      <div class="filter-chips" role="group" aria-label="Filter by problem">
+        ${FILTERS.map((x) => `<button class="fchip" data-filter="${x.id}" aria-pressed="${flt === x.id}"><span class="fdot ${x.id}"></span>${x.word}<b>${count(x.id)}</b></button>`).join("")}
+      </div>
+      ${Object.keys(zones).sort().map((z) => ECPick.zoneSection("maint", z, `${zones[z].length} to fix`,
+        zones[z].sort((a, b) => n(a.d.aisle, b.d.aisle) || n(a.d.section, b.d.section)).map(({ d, pills }) => {
+          const ps = pills.filter((p) => flt === "all" || PILL[p].type === flt);
+          return `<div class="fix-row2">
             <span class="ck-where"><b class="mono">${esc(EC.locKey(d))}</b><span class="note mono">${esc(d.serial)}</span></span>
-            <span class="fix-detail">${detail(type, d)}</span>${I.next}</button>`).join("")}
-      </div>`;
-    }).join("");
+            <span class="fix-mid">
+              ${ps.map((p) => `<span class="pill ${PILL[p].cls}"><i></i>${PILL[p].word}${PILL[p].type === "battery" ? ` · ${d.battery}%` : ""}</span>`).join("")}
+              <span class="note">Last seen ${esc(ago(d.seenAt) || "never")}</span>
+            </span>
+            <button class="help-btn" data-issue="${PILL[ps[0]].issue}" data-sn="${d.serial}">Help me ${I.next}</button>
+          </div>`;
+        }).join(""), true)).join("")}`;
   }
 
   const displayCard = (d) => `<div class="cur-item">${ECPick.thumb(d).replace('class="thumb"', 'class="thumb big"')}
       <span class="dev-meta"><b class="mono">${esc(EC.locKey(d))}</b><span class="note mono">${esc(d.serial)}</span>
       <span class="dev-line">${ECPick.chip(d.status)}</span>${EC.health(d, { withAge: true })}</span></div>`;
 
+  /* search: location (A15-1, a151) or display ID; tap a result to get help with it */
+  function resultsHtml() {
+    const q = String(f.q || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
+    if (!q) return "";
+    const hits = EC.fleet().filter((d) => EC.locKey(d).replace("-", "").includes(q) || d.serial.includes(q)).slice(0, 8);
+    if (!hits.length) return `<div class="empty" style="padding:12px">No display matches “${esc(f.q)}”.</div>`;
+    return `<div class="pick-zone">${hits.map((d) => `<button class="tree-dev pick-dev" data-hit="${d.serial}">${ECPick.thumb(d)}
+      <span class="dev-meta"><b class="mono">${esc(EC.locKey(d))}</b><span class="note mono">${esc(d.serial)}</span><span class="dev-line">${ECPick.chip(d.status)}${EC.health(d)}</span></span>
+      ${I.next.replace("<svg", '<svg class="row-go"')}</button>`).join("")}</div>`;
+  }
+
   /* ---------- screens ---------- */
   function body() {
     const d = dev();
     switch (f.step) {
       case "home": return `
-        <button class="choice big" id="help"><span class="choice-t">Help with this one</span><span class="note">Scan it or pick it, then tell us what’s wrong.</span>${I.next}</button>
+        <h3 class="section-label" style="margin:0">Help with this one</h3>
+        <div class="search-scan">
+          ${I.search}
+          <input class="input" id="m-search" type="search" placeholder="Search location or display ID" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(f.q || "")}" />
+          <button class="scan-btn" id="help" aria-label="Scan the display’s barcode">${I.scan}</button>
+        </div>
+        <p class="note" style="margin:-4px 0 0">Type to search, or tap the barcode to scan.</p>
+        <div id="m-results">${resultsHtml()}</div>
         <h3 class="section-label" style="margin:8px 0 0">To fix at this site</h3>
-        ${listHtml()}
+        <div id="m-list">${listHtml()}</div>
         <button class="link" id="batt-guide">Just swapping batteries? Open the battery guide</button>`;
       case "find": return ECPick.bodyHtml();
       case "issue": {
@@ -170,7 +214,7 @@
         ${header({ home: true })}
         <div class="flow">
           ${f.step === "find" ? ECPick.scanHtml("Start camera and scan a display") : ""}
-          <div class="flow-top"><div class="flow-name"><span class="kicker">Maintenance</span><span class="count">${f.step === "home" ? `${EC.issues().length} to fix` : ""}</span></div></div>
+          <div class="flow-top"><div class="flow-name"><span class="kicker">Maintenance</span><span class="count">${f.step === "home" ? `${new Set(EC.issues().map((x) => x.d.serial)).size} to fix` : ""}</span></div></div>
           <div class="step" id="body">
             ${eyebrow()}
             <h2>${esc(title)}</h2>
@@ -195,6 +239,7 @@
     if (f.step === "what") {
       if (f.from === "replace") { state.flows.replace = { v: 1, step: "choose", old: f.sn }; delete state.flows.maint; return go("replace"); }
       if (f.from === "issue") return setStep("issue", { sub: f.issue === "battery" ? null : "wake" });
+      if (f.from === "search") return setStep("home");
       return setStep("find");
     }
     if (f.step === "node") {
@@ -207,7 +252,16 @@
     $("back")?.addEventListener("click", back);
     $("help")?.addEventListener("click", () => setStep("find", { from: null }));
     $("batt-guide")?.addEventListener("click", () => { state.flows.battery = { step: 0, returnTo: "maint" }; go("battery"); });
-    document.querySelectorAll("[data-issue]").forEach((b) => b.onclick = () => setStep("issue", { issue: b.dataset.issue, sn: b.dataset.sn, sub: b.dataset.issue === "battery" ? null : "wake", wakeSlide: 0 }));
+    const bindList = () => {
+      document.querySelectorAll("[data-issue]").forEach((b) => b.onclick = () => setStep("issue", { issue: b.dataset.issue, sn: b.dataset.sn, sub: b.dataset.issue === "battery" ? null : "wake", wakeSlide: 0 }));
+      document.querySelectorAll("[data-filter]").forEach((b) => b.onclick = () => { f.filter = b.dataset.filter; save(); repaintList(); });
+      ECPick.bindZones(repaintList);
+    };
+    const repaintList = () => { const box = $("m-list"); if (box) { box.innerHTML = listHtml(); bindList(); } };
+    bindList();
+    const bindHits = () => document.querySelectorAll("[data-hit]").forEach((b) => b.onclick = () => { f.q = ""; setStep("what", { sn: b.dataset.hit, hist: [], node: null, from: "search" }); });
+    bindHits();
+    $("m-search")?.addEventListener("input", (e) => { f.q = e.target.value; save(); $("m-results").innerHTML = resultsHtml(); bindHits(); });
     if (f.step === "find") picker = ECPick.bind({ onPick: (sn) => setStep("what", { sn, hist: [], node: null }) });
     document.querySelectorAll("[data-sym]").forEach((b) => b.onclick = () => { f.hist = []; f.node = null; const s = SYMPTOMS.find((x) => x.id === b.dataset.sym); setStep("node", { node: s.start, wakeSlide: 0 }); });
     document.querySelectorAll("[data-ans]").forEach((b) => b.onclick = () => toNode(NODES[f.node][b.dataset.ans]));

@@ -12,7 +12,7 @@
   };
 
   // Maintenance shows how many problems the system can see at this site
-  const nIssues = EC.issues().length;
+  const nIssues = new Set(EC.issues().map((x) => x.d.serial)).size; // displays with something to fix
 
   function card(key, major) {
     const f = FLOWS[key];
@@ -34,7 +34,7 @@
       ${key === "maint" && nIssues ? `<span class="resume-chip">${nIssues} to fix</span>` : ""}
       <span class="kicker">${f.kicker}</span>
       <span class="art" aria-hidden="true">${art}</span>
-      <span class="label-row"><span class="title">${f.title}</span>${I.arrow.replace("<svg", '<svg style="width:18px;height:18px;color:var(--tint);flex:none"')}</span>
+      <span class="label-row"><span class="title">${f.title}&nbsp;${I.arrow.replace("<svg", '<svg class="title-go"')}</span></span>
     </button>`;
   }
 

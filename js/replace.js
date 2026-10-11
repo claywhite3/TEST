@@ -117,7 +117,8 @@
           <div class="move-row"><span class="note">From</span><b class="mono">${esc(d.serial)}</b></div>
           <div class="move-row"><span class="note">To</span><b class="mono">${esc(f.neu)}</b></div>
         </div>
-        <p class="note" style="margin:0">${esc(d.serial)} comes off ${esc(EC.locKey(d))}. ${esc(f.neu)} takes its place with the same sign.</p>`;
+        <p class="note" style="margin:0">${esc(d.serial)} comes off ${esc(EC.locKey(d))}. ${esc(f.neu)} takes its place with the same sign.</p>
+        <button class="choice" id="fresh-setup"><span class="choice-t">Don’t move it. Set up the new one fresh</span><span class="note">Same location, new sign. Goes through Install.</span>${I.next}</button>`;
       case "battery": return `<div class="safety-pin" role="note">${I.warn}<span>Li-ion pack. Keep metal off the plug tips. Swollen or hot pack: stop.</span></div>${ECGuide.html(ECGuide.INSERT, "Put a battery in the new display")}`;
       case "swap": return `
         <ul class="lines"><li>Take down the old display.</li><li>Hang the new one in the same spot, the same way up.</li></ul>
@@ -203,6 +204,13 @@
     if (f.step === "battery") ECGuide.bind(ECGuide.INSERT, () => f.battSlide, (k) => { f.battSlide = k; save(); });
     if (f.step === "wake") ECGuide.bind(ECGuide.WAKE, () => f.wakeSlide, (k) => { f.wakeSlide = k; save(); });
     $("no-light")?.addEventListener("click", () => { state.flows.battery = { step: 0, returnTo: "replace" }; go("battery"); });
+    // not moving the sign: hand the new display to Install, already at this location and replacing the old one
+    $("fresh-setup")?.addEventListener("click", () => {
+      const d = oldD();
+      state.flows.install = { v: 4, step: "battery", battSlide: 0, orient: d.orient, multi: false, locIdx: 0, fromReplace: f.old,
+        devices: [{ serial: f.neu, zone: d.zone, aisle: d.aisle, section: d.section, locKey: EC.locKey(d), locMode: "replace", replaces: d.serial }] };
+      delete state.flows.replace; go("install");
+    });
     addEventListener("online", () => { if (f.step === "push") render(); });
     addEventListener("offline", () => { if (f.step === "push") render(); });
     $("again")?.addEventListener("click", () => { f = state.flows.replace = fresh(); save(); render(); });

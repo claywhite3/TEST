@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const BUILD = "v0.8.0 · 2026-10-11";
+  const BUILD = "v0.8.1 · 2026-10-11";
 
   /* ---------- fixtures ----------
      Trap cases are deliberate (principle 55). Don't tidy them:

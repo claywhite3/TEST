@@ -21,6 +21,25 @@
       </div>
     </div>`;
 
+  /* ---------- collapsible zones (every list of displays by zone can collapse; open state kept per list) ---------- */
+  const zoneOpen = (scope, z, dflt) => { const u = (EC.state.ui = EC.state.ui || {}); const m = (u[scope] = u[scope] || {}); return z in m ? m[z] : dflt; };
+  function zoneSection(scope, z, meta, inner, dflt = false) {
+    const open = zoneOpen(scope, z, dflt);
+    return `<div class="pick-zone" data-zscope="${scope}">
+      <button class="zone-toggle" data-zone="${esc(z)}" data-zscope="${scope}" data-zdefault="${dflt}" aria-expanded="${open}">
+        <span class="caret">${I.next}</span><span class="pick-zone-name">Zone ${esc(z)}</span><span class="tree-meta">${esc(meta)}</span>
+      </button>
+      ${open ? inner : ""}</div>`;
+  }
+  function bindZones(repaint) {
+    document.querySelectorAll(".zone-toggle").forEach((b) => b.onclick = () => {
+      const scope = b.dataset.zscope, z = b.dataset.zone;
+      const m = ((EC.state.ui = EC.state.ui || {})[scope] = EC.state.ui[scope] || {});
+      m[z] = !zoneOpen(scope, z, b.dataset.zdefault === "true");
+      EC.save(); repaint();
+    });
+  }
+
   function listHtml(fleet) {
     if (!fleet.length) return `<div class="empty">No displays installed at this site yet.</div>`;
     const byLoc = {};
@@ -28,9 +47,8 @@
     const zones = {};
     fleet.forEach((d) => (zones[d.zone] = zones[d.zone] || []).push(d));
     const n = (a, b) => Number(a) - Number(b);
-    return Object.keys(zones).sort().map((z) => `
-      <div class="pick-zone"><span class="pick-zone-name">Zone ${esc(z)}</span>
-        ${zones[z].sort((a, b) => n(a.aisle, b.aisle) || n(a.section, b.section) || a.serial.localeCompare(b.serial)).map((d) => {
+    return Object.keys(zones).sort().map((z) => zoneSection("pick", z, `${zones[z].length} displays`,
+        zones[z].sort((a, b) => n(a.aisle, b.aisle) || n(a.section, b.section) || a.serial.localeCompare(b.serial)).map((d) => {
           const mates = byLoc[EC.locKey(d)];
           return `<button class="tree-dev pick-dev" data-pick="${d.serial}">
             ${thumb(d)}
@@ -38,8 +56,7 @@
               <span class="note mono">${esc(d.serial)}</span><span class="dev-line">${chip(d.status)}${EC.health(d)}</span></span>
             ${I.next.replace("<svg", '<svg class="row-go"')}
           </button>`;
-        }).join("")}
-      </div>`).join("");
+        }).join(""))).join("");
   }
 
   /* opts: { onPick(serial), label } — returns { scanner } so the page can stop it */
@@ -153,7 +170,11 @@
       const v = norm(serial.value); serial.value = v; $("pick-len").textContent = `${v.length}/${SERIAL_LEN}`;
       if (v.length === SERIAL_LEN) tryPick(v, false); // quiet until complete
     });
-    document.querySelectorAll("[data-pick]").forEach((b) => b.onclick = () => tryPick(b.dataset.pick, false));
+    const bindList = () => {
+      document.querySelectorAll("[data-pick]").forEach((b) => b.onclick = () => tryPick(b.dataset.pick, false));
+      bindZones(() => { const box = document.querySelector(".pick-list"); if (box) { box.innerHTML = listHtml(EC.fleet()); bindList(); } });
+    };
+    bindList();
     return { scanner };
   }
 
@@ -162,5 +183,5 @@
     <div id="pick-reject"></div>
     ${list ? `<div class="pick-list">${listHtml(EC.fleet())}</div>` : ""}`;
 
-  window.ECPick = { scanHtml, bodyHtml, bind, thumb, chip };
+  window.ECPick = { scanHtml, bodyHtml, bind, thumb, chip, zoneSection, bindZones };
 })();

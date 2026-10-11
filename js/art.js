@@ -250,16 +250,18 @@
       </svg>`;
     },
     replace() {
-      return `<svg viewBox="0 0 160 110" role="img" aria-label="Old display coming down, new display going up in its place">
-        <rect x="10" y="20" width="52" height="80" rx="4" fill="var(--hw-frame)" opacity=".45"/>
-        <rect x="14" y="24" width="44" height="72" rx="1.5" fill="var(--hw-paper)" opacity=".5"/>
-        <path d="M26 50l20 20M46 50L26 70" stroke="var(--tint)" stroke-width="4" stroke-linecap="round"/>
-        <rect x="98" y="10" width="52" height="80" rx="4" fill="var(--hw-frame)"/>
-        <rect x="102" y="14" width="44" height="72" rx="1.5" fill="var(--hw-paper)"/>
-        <rect x="102" y="14" width="44" height="14" fill="var(--tint)" opacity=".85"/>
-        <rect x="108" y="40" width="30" height="16" rx="2" fill="var(--hw-frame)" opacity=".7"/>
-        <path d="M68 48 C 78 36, 86 36, 92 42" stroke="var(--tint)" stroke-width="3" fill="none" stroke-linecap="round"/>
-        <path d="M86 40 l7 3 -2 7" stroke="var(--tint)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      return `<svg viewBox="0 0 160 110" role="img" aria-label="Old display out, new display in">
+        <rect x="12" y="18" width="46" height="78" rx="4" fill="var(--hw-frame)" opacity=".35"/>
+        <rect x="16" y="22" width="38" height="70" rx="1.5" fill="var(--hw-paper)" opacity=".55"/>
+        <circle cx="35" cy="57" r="13" fill="var(--surface)"/>
+        <path d="M29 51l12 12M41 51L29 63" stroke="var(--bad)" stroke-width="3.4" stroke-linecap="round"/>
+        <path d="M66 57h26" stroke="var(--tint)" stroke-width="4" stroke-linecap="round"/>
+        <path d="M84 48l10 9-10 9" stroke="var(--tint)" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="102" y="14" width="46" height="86" rx="4" fill="var(--hw-frame)"/>
+        <rect x="106" y="18" width="38" height="78" rx="1.5" fill="var(--hw-paper)"/>
+        <rect x="106" y="18" width="38" height="13" fill="var(--tint)"/>
+        <rect x="111" y="42" width="26" height="16" rx="2" fill="var(--hw-frame)" opacity=".75"/>
+        <rect x="111" y="64" width="18" height="4" rx="2" fill="var(--hw-frame)" opacity=".3"/>
       </svg>`;
     },
     trouble() {

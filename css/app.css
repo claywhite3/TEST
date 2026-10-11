@@ -772,3 +772,33 @@ details.demo .chip-row { margin-top: 8px; }
 .tree-dev .check .part { display: block; width: 10px; height: 3px; border-radius: 2px; background: var(--accent); }
 .tree-dev.pair .dev-line .note { min-width: 74px; }
 .dev-meta .note.wrap { white-space: normal; overflow: visible; }
+
+/* v0.8.1: minor card arrow sits at the end of the title, wherever it wraps */
+.action.minor .title .title-go { display: inline-block; width: 17px; height: 17px; color: var(--tint); vertical-align: -2px; }
+
+.zone-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 52px; padding: 0 14px; border: 0; background: none; text-align: left; color: var(--fg); }
+.zone-toggle .pick-zone-name { padding: 0; flex: 1; }
+.zone-toggle .caret svg { width: 16px; height: 16px; color: var(--fg-2); transition: transform .15s; }
+.zone-toggle[aria-expanded="true"] .caret svg { transform: rotate(90deg); }
+
+/* v0.8.1 Maintenance: search + scan, issues by location with type filters */
+.search-scan { position: relative; display: flex; align-items: center; }
+.search-scan > svg { position: absolute; left: 14px; width: 20px; height: 20px; color: var(--fg-3); pointer-events: none; }
+.search-scan .input { height: 56px; padding-left: 44px; padding-right: 64px; font-size: 17px; }
+.search-scan .scan-btn { position: absolute; right: 6px; width: 48px; height: 44px; border: 0; border-radius: 10px; background: var(--tint); color: #fff; display: grid; place-items: center; }
+.search-scan .scan-btn svg { width: 24px; height: 24px; }
+.filter-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fchip { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font: 700 14px/1 var(--f-body); color: var(--fg-2); }
+.fchip b { font-weight: 700; color: var(--fg-3); }
+.fchip[aria-pressed="true"] { border-color: var(--tint); color: var(--fg); box-shadow: 0 0 0 1px var(--tint) inset; }
+.fdot { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-3); }
+.fdot.battery { background: var(--warn); } .fdot.sign { background: var(--bad); }
+.fix-row2 { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.fix-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.fix-mid .note { font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; font: 700 12.5px/1.2 var(--f-body); }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.help-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font: 700 14px/1 var(--f-body); color: var(--fg); white-space: nowrap; }
+.help-btn svg { width: 16px; height: 16px; color: var(--tint); }
