@@ -249,6 +249,19 @@
         <circle cx="38" cy="42" r="3.4" fill="var(--hw-frame)" stroke="var(--hw-steel)"/>
       </svg>`;
     },
+    replace() {
+      return `<svg viewBox="0 0 160 110" role="img" aria-label="Old display coming down, new display going up in its place">
+        <rect x="10" y="20" width="52" height="80" rx="4" fill="var(--hw-frame)" opacity=".45"/>
+        <rect x="14" y="24" width="44" height="72" rx="1.5" fill="var(--hw-paper)" opacity=".5"/>
+        <path d="M26 50l20 20M46 50L26 70" stroke="var(--tint)" stroke-width="4" stroke-linecap="round"/>
+        <rect x="98" y="10" width="52" height="80" rx="4" fill="var(--hw-frame)"/>
+        <rect x="102" y="14" width="44" height="72" rx="1.5" fill="var(--hw-paper)"/>
+        <rect x="102" y="14" width="44" height="14" fill="var(--tint)" opacity=".85"/>
+        <rect x="108" y="40" width="30" height="16" rx="2" fill="var(--hw-frame)" opacity=".7"/>
+        <path d="M68 48 C 78 36, 86 36, 92 42" stroke="var(--tint)" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M86 40 l7 3 -2 7" stroke="var(--tint)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>`;
+    },
     trouble() {
       return `<svg viewBox="0 0 160 110" role="img" aria-label="Display with a stale screen and a diagnostic badge">
         <rect x="40" y="6" width="56" height="98" rx="4" fill="var(--hw-frame)"/>
@@ -393,5 +406,72 @@
     </svg>`;
   }
 
-  window.ECArt = { rear, rearOverview, label, checkin, tools, access, home, bars, wake };
+
+  /* ---------- where to find the location (Install › Location) ----------
+     Drawn from field photos. Blue strip reads top to bottom: Zone, Aisle, Section.
+     White location label: Section large on the left; Zone over Aisle on the right.
+     Each part carries data-part so the field being typed lights up its piece (CSS). */
+  function locate(kind = "endcap") {
+    const BLUE = "#1a5fd0", INKW = "#ffffff";
+    const tile = (part, x, y, w, h, t, fs) => `<g data-part="${part}">
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${BLUE}"/>
+      <text x="${x + w / 2}" y="${y + h / 2 + fs * 0.36}" text-anchor="middle" font-family="var(--f-body)" font-weight="800" font-size="${fs}" fill="${INKW}">${t}</text>
+      <rect class="hl" x="${x - 3}" y="${y - 3}" width="${w + 6}" height="${h + 6}" rx="5" fill="none" stroke="var(--tint)" stroke-width="3"/></g>`;
+    // white label: big section left, zone over aisle right, barcode under
+    const lab = (x, y, sec, zone, aisle, w = 74) => {
+      const h = 40;
+      let bc = ""; for (let i = 0; i < Math.floor((w - 12) / 2.3); i++) bc += `<rect x="${x + 6 + i * 2.3}" y="${y + 31}" width="${i % 3 ? 1 : 1.6}" height="6" fill="#222"/>`;
+      return `<g>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="#f4f4f2" stroke="#c9ccd0"/>
+        <g data-part="section"><text x="${x + 6}" y="${y + 26}" font-family="var(--f-body)" font-weight="800" font-size="${sec.length > 2 ? (w < 70 ? 17 : 20) : 24}" fill="#111">${sec}</text>
+          <rect class="hl" x="${x + 2}" y="${y + 4}" width="${sec.length > 2 ? (w < 70 ? 33 : 40) : 22}" height="26" rx="3" fill="none" stroke="var(--tint)" stroke-width="2.5"/></g>
+        <g data-part="zone"><text x="${x + w - 12}" y="${y + 14}" text-anchor="middle" font-family="var(--f-body)" font-weight="800" font-size="11" fill="#111">${zone}</text>
+          <rect class="hl" x="${x + w - 24}" y="${y + 3}" width="24" height="14" rx="3" fill="none" stroke="var(--tint)" stroke-width="2.5"/></g>
+        <g data-part="aisle"><text x="${x + w - 12}" y="${y + 27}" text-anchor="middle" font-family="var(--f-body)" font-weight="800" font-size="11" fill="#111">${aisle}</text>
+          <rect class="hl" x="${x + w - 24}" y="${y + 17}" width="24" height="13" rx="3" fill="none" stroke="var(--tint)" stroke-width="2.5"/></g>
+        ${bc}</g>`;
+    };
+    const call = (part, y, x0, x1, word) => `<g data-part="${part}">
+      <path d="M${x0} ${y}H${x1}" stroke="var(--fg-3)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <text class="cl" x="${x1 + 6}" y="${y + 5}" font-family="var(--f-body)" font-weight="700" font-size="14">${word}</text></g>`;
+    const code = (x, y, t) => `<text x="${x}" y="${y}" font-family="var(--f-mono)" font-weight="700" font-size="13" fill="var(--fg-2)">= ${t}</text>`;
+
+    if (kind === "produce") {
+      return `<svg viewBox="0 0 320 200" role="img" aria-label="Produce table corner: blue strip reads AP, 3, 2. White label reads 2, AP over 3. Location AP3-2.">
+        <rect width="320" height="200" rx="12" fill="var(--wall)"/>
+        ${[30, 52, 74, 96].map((cx, i) => `<circle cx="${cx}" cy="22" r="11" fill="${i % 2 ? "#e9a23b" : "#8cc152"}" opacity=".85"/>`).join("")}
+        <rect x="12" y="30" width="196" height="40" rx="5" fill="var(--hw-back-2)"/>
+        ${lab(118, 30 + 0, "2", "AP", "3")}
+        <rect x="12" y="70" width="196" height="122" fill="#b8875a"/>
+        <rect x="70" y="78" width="54" height="114" rx="4" fill="var(--hw-frame)"/>
+        ${tile("zone", 76, 86, 42, 30, "AP", 15)}
+        ${tile("aisle", 76, 119, 42, 30, "3", 15)}
+        ${tile("section", 76, 152, 42, 30, "2", 15)}
+        ${call("zone", 101, 122, 222, "Zone")}
+        ${call("aisle", 134, 122, 222, "Aisle")}
+        ${call("section", 167, 122, 222, "Section")}
+        ${code(222, 60, "AP3-2")}
+      </svg>`;
+    }
+    // endcap: aisle header sign with the big customer aisle number (not the location), strip in the upright, label under it
+    return `<svg viewBox="0 0 320 200" role="img" aria-label="Endcap: blue strip reads A, 5, 100. White label reads 100, A over 5. Location A5-100. The big aisle number 62 is not the location.">
+      <rect width="320" height="200" rx="12" fill="var(--wall)"/>
+      <rect x="12" y="14" width="112" height="16" fill="${BLUE}"/>
+      <rect x="12" y="30" width="112" height="118" fill="#3b3e44"/>
+      <text x="68" y="112" text-anchor="middle" font-family="var(--f-body)" font-weight="700" font-size="64" fill="#8f949c">62</text>
+      <text x="68" y="140" text-anchor="middle" font-family="var(--f-body)" font-weight="700" font-size="11" fill="#c9ced6">NOT THE LOCATION</text>
+      <rect x="190" y="10" width="10" height="182" fill="var(--hw-frame)"/>
+      <rect x="124" y="34" width="66" height="156" rx="4" fill="var(--hw-frame)"/>
+      ${tile("zone", 133, 40, 48, 30, "A", 16)}
+      ${tile("aisle", 133, 73, 48, 30, "5", 16)}
+      ${tile("section", 133, 106, 48, 30, "100", 15)}
+      ${lab(127, 144, "100", "A", "5", 60)}
+      ${call("zone", 55, 204, 226, "Zone")}
+      ${call("aisle", 88, 204, 226, "Aisle")}
+      ${call("section", 121, 204, 226, "Section")}
+      ${code(214, 172, "A5-100")}
+    </svg>`;
+  }
+
+  window.ECArt = { rear, rearOverview, label, checkin, tools, access, home, bars, wake, locate };
 })();

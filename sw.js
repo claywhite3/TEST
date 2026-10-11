@@ -2,7 +2,7 @@
    Everything the app needs is cached on install. Pushing content and live status still need a connection.
    VERSIONING: bump VERSION together with BUILD in js/core.js and the ?v= tags (one rule, one bump).
    ASSETS: keep in step with the files in the repo; an asset missing here still works online but not offline. */
-const VERSION = "v0.6.1";
+const VERSION = "v0.8.0";
 const CACHE = "engage-companion-" + VERSION;
 const ASSETS = [
   "./",
@@ -33,6 +33,12 @@ const ASSETS = [
   "icons/icon-192.png",
   "icons/icon-512.png",
   "icons/maskable-512.png",
+  "js/guide.js",
+  "js/maintenance.js",
+  "js/pick.js",
+  "js/replace.js",
+  "maintenance.html",
+  "replace.html",
   "index.html",
   "install.html",
   "js/art.js",

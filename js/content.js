@@ -138,7 +138,7 @@
   function openBatteryGuide() { scanner.stop(); state.flows.battery = { step: 0, returnTo: "content" }; go("battery"); }
 
   /* ---------- selection ---------- */
-  function trySelect(sn, { fromScan = false } = {}) {
+  function trySelect(sn, { fromScan = false, quiet = false } = {}) {
     const d = byId(sn);
     if (!d) {
       const known = EC.DEVICES.find((x) => x.serial === sn);
@@ -152,13 +152,20 @@
       save(); paintFind(); return;
     }
     f.reject = null;
-    if (!f.sel.includes(sn)) { f.sel.push(sn); if (fromScan) haptic(40); }
+    const added = !f.sel.includes(sn);
+    if (added) { f.sel.push(sn); if (fromScan) haptic(40); }
     f.open[d.zone] = true; f.open[d.zone + d.aisle] = true; // reveal it in the list
     save(); paintFind();
+    if (added && !quiet) askPartner(d);
   }
   function toggle(sn) {
     if (f.sel.includes(sn)) { f.sel = f.sel.filter((x) => x !== sn); f.reject = null; save(); paintFind(); }
-    else trySelect(sn);
+    else trySelect(sn, { quiet: true });
+  }
+  function toggleLoc(key) {
+    const grp = fleetNow().filter((d) => loc(d) === key);
+    if (grp.every((d) => f.sel.includes(d.serial))) { f.sel = f.sel.filter((sn) => !grp.some((d) => d.serial === sn)); f.reject = null; save(); paintFind(); }
+    else askLocation(key);
   }
 
   /* ---------- scanner (same behavior as Install: tap to start, keeps scanning, wrong codes shake) ---------- */
@@ -263,22 +270,76 @@
                   <button class="tree-open" data-open="${esc(key)}" aria-expanded="${aOpen}"><span class="caret">${I.next}</span><span class="tree-name">Aisle ${esc(a)}</span><span class="tree-meta">${list.length}</span></button>
                   <button class="tree-all" data-all="${esc(key)}" aria-pressed="${!!allIn}" ${pickable.length ? "" : "disabled"}>${allIn ? "Clear" : "Select all"}</button>
                 </div>
-                ${aOpen ? list.map((d) => {
-                  const on = f.sel.includes(d.serial);
-                  const blocked = o && d.orient !== o && !on;
-                  return `
-                    <button class="tree-dev" data-pick="${d.serial}" aria-pressed="${on}" ${blocked ? 'data-blocked="1"' : ""}>
-                      <span class="check" aria-hidden="true">${on ? I.ok : ""}</span>
-                      ${thumb(d)}
-                      <span class="dev-meta"><b class="mono">${esc(loc(d))}</b><span class="note">${esc(d.sign.desc || "")}</span>${chip(d.status)}</span>
-                      ${blocked ? `<span class="dev-why">${ORIENT[d.orient]}</span>` : ""}
-                    </button>`;
-                }).join("") : ""}
+                ${aOpen ? groupsOf(list).map((grp) => grp.length === 1 ? devRow(grp[0], o) : pairRow(grp, o)).join("") : ""}
               </div>`;
           }).join("") : ""}
         </div>`;
     }).join("");
   }
+  /* displays in an aisle, grouped by location (a location holds up to two: produce corners) */
+  function groupsOf(list) {
+    const g = {};
+    list.forEach((d) => (g[loc(d)] = g[loc(d)] || []).push(d));
+    return Object.values(g).map((x) => x.sort((p, q) => p.serial.localeCompare(q.serial)));
+  }
+  function devRow(d, o) {
+    const on = f.sel.includes(d.serial);
+    const blocked = o && d.orient !== o && !on;
+    return `
+      <button class="tree-dev" data-pick="${d.serial}" aria-pressed="${on}" ${blocked ? 'data-blocked="1"' : ""}>
+        <span class="check" aria-hidden="true">${on ? I.ok : ""}</span>
+        ${thumb(d)}
+        <span class="dev-meta"><b class="mono">${esc(loc(d))}</b><span class="note">${esc(d.sign.desc || "")}</span><span class="dev-line">${chip(d.status)}${EC.health(d)}</span></span>
+        ${blocked ? `<span class="dev-why">${ORIENT[d.orient]}</span>` : ""}
+      </button>`;
+  }
+  function pairRow(grp, o) {
+    const key = loc(grp[0]);
+    const ons = grp.filter((d) => f.sel.includes(d.serial)).length;
+    const same = JSON.stringify(grp[0].sign) === JSON.stringify(grp[1].sign);
+    const blocked = o && grp[0].orient !== o && !ons;
+    return `
+      <button class="tree-dev pair" data-pickloc="${esc(key)}" aria-pressed="${ons === grp.length}" ${blocked ? 'data-blocked="1"' : ""}>
+        <span class="check" aria-hidden="true">${ons === grp.length ? I.ok : ons ? '<i class="part"></i>' : ""}</span>
+        ${same ? thumb(grp[0]) : `<span class="thumb-pair">${grp.map((d) => thumb(d)).join("")}</span>`}
+        <span class="dev-meta"><b class="mono">${esc(key)}<span class="pair-tag">2 displays</span></b>
+          <span class="note">${same ? esc(grp[0].sign.desc || "") + " · same sign" : "Different signs"}</span>
+          ${grp.map((d) => `<span class="dev-line"><span class="note mono">${esc(d.serial)}${f.sel.includes(d.serial) ? " ✓" : ""}</span>${chip(d.status)}${EC.health(d)}</span>`).join("")}</span>
+        ${blocked ? `<span class="dev-why">${ORIENT[grp[0].orient]}</span>` : ""}
+      </button>`;
+  }
+  /* tapping a shared location asks: same sign on both, or just one (pick it, or scan the one in front of you) */
+  function askLocation(key) {
+    const grp = fleetNow().filter((d) => loc(d) === key);
+    const { el, close } = EC.sheet(`
+      <h3>${esc(key)} has two displays</h3>
+      <div class="opt-list">
+        <button class="btn" data-both="1">Both · same sign</button>
+        ${grp.map((d) => `<button class="btn ghost" data-one="${d.serial}">Just <span class="mono">${esc(d.serial)}</span></button>`).join("")}
+      </div>
+      <p class="note" style="margin:0">Not sure which is which? Close this and scan the one you’re updating.</p>`, { label: `${key} has two displays` });
+    el.querySelector("[data-both]").onclick = () => { close(); grp.forEach((d) => trySelect(d.serial, { quiet: true })); };
+    el.querySelectorAll("[data-one]").forEach((b) => b.onclick = () => {
+      close();
+      f.sel = f.sel.filter((sn) => !grp.some((d) => d.serial === sn));
+      trySelect(b.dataset.one, { quiet: true });
+    });
+  }
+  /* scanning or typing one display of a pair offers the other one */
+  function askPartner(d) {
+    const mate = fleetNow().find((x) => x.serial !== d.serial && loc(x) === loc(d));
+    if (!mate || f.sel.includes(mate.serial)) return;
+    const { el, close } = EC.sheet(`
+      <h3>${esc(d.serial)} shares ${esc(loc(d))} with ${esc(mate.serial)}</h3>
+      <p class="note" style="margin:0">Update both with the same sign?</p>
+      <div class="opt-list">
+        <button class="btn" data-both="1">Update both</button>
+        <button class="btn ghost" data-one="1">Just this one</button>
+      </div>`, { label: "Shared location" });
+    el.querySelector("[data-both]").onclick = () => { close(); trySelect(mate.serial, { quiet: true }); };
+    el.querySelector("[data-one]").onclick = () => close();
+  }
+
   function paintFind() {
     if (f.step !== "find") return;
     const t = $("tree"); if (t) t.innerHTML = treeHtml();
@@ -291,6 +352,7 @@
   function bindFind() {
     document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { const k = b.dataset.open; f.open[k] = !f.open[k]; save(); paintFind(); });
     document.querySelectorAll("[data-pick]").forEach((b) => b.onclick = () => toggle(b.dataset.pick));
+    document.querySelectorAll("[data-pickloc]").forEach((b) => b.onclick = () => toggleLoc(b.dataset.pickloc));
     document.querySelectorAll("[data-all]").forEach((b) => b.onclick = () => {
       const key = b.dataset.all;
       const list = fleetNow().filter((d) => d.zone + d.aisle === key);
@@ -339,6 +401,7 @@
       case "current": {
         const sel = selected();
         const waiting = sel.filter((d) => d.status === "waiting"), unconf = sel.filter((d) => d.status === "unconfirmed");
+        const lowBatt = sel.filter((d) => EC.battLevel(d.battery) === "bad");
         const same = sel.every((d) => JSON.stringify(d.sign) === JSON.stringify(sel[0].sign));
         return `
           ${sel.length === 1 || same
@@ -346,6 +409,13 @@
                <div class="cur-row">${sel.length === 1 ? `<span class="mono"><b>${esc(loc(sel[0]))}</b></span>${chip(sel[0].status)}` : `<span class="note">All ${sel.length} displays show this sign.</span>`}</div>`
             : `<div class="cur-list">${sel.map((d) => `<div class="cur-item">${thumb(d, "thumb big")}<span class="dev-meta"><b class="mono">${esc(loc(d))}</b>${chip(d.status)}</span></div>`).join("")}</div>
                <p class="note" style="margin:0">These displays show different signs. They will all get the same new sign.</p>`}
+          <section class="checkin" aria-label="Last check-in">
+            <h3>Last check-in</h3>
+            ${sel.map((d) => `<div class="ck-row"><span class="ck-where"><b class="mono">${esc(loc(d))}</b><span class="note">${d.seenAt ? esc(EC.ago(d.seenAt)) : ""}</span></span>${EC.health(d)}</div>`).join("")}
+            <p class="note" style="margin:0">From the display’s last Wi-Fi connection. Not live.</p>
+          </section>
+          ${lowBatt.length ? `<div class="hint-row as-note bad">${I.warn}<span>Battery was at ${lowBatt.map((d) => `<b>${d.battery}%</b> on <b>${esc(loc(d))}</b>`).join(", ")} at the last check-in. Swap it before you wake the display.</span></div>
+          <button class="btn ghost" id="swap-now">Swap Battery</button>` : ""}
           ${waiting.length ? `<div class="hint-row as-note">${I.clock}<span>A sign is still waiting for a wake on <b>${waiting.map((d) => esc(loc(d))).join(", ")}</b>. A new push replaces it.</span></div>` : ""}
           ${unconf.length ? `<div class="hint-row as-note bad">${I.warn}<span>The last sign on <b>${unconf.map((d) => esc(loc(d))).join(", ")}</b> was not confirmed. Wake it to finish, or send a new sign.</span></div>` : ""}
           ${waiting.length || unconf.length ? `<button class="btn ghost" id="wake-only">Just wake ${waiting.length + unconf.length > 1 ? "them" : "it"}</button>` : ""}
@@ -476,6 +546,7 @@
     $("back")?.addEventListener("click", back);
     $("next")?.addEventListener("click", next);
     $("no-light")?.addEventListener("click", openBatteryGuide);
+    $("swap-now")?.addEventListener("click", openBatteryGuide);
 
     if (f.step === "find") {
       scanner.paint("idle");

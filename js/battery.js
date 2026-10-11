@@ -34,6 +34,7 @@
       art: () => R({ cover: "on", screw: "out", focus: "screw", motion: "screwIn" }) },
   ];
   const N = STEPS.length;
+  const BACK_TO = { install: "Back to Install", content: "Back to Update Content", maint: "Back to Maintenance", replace: "Back to Replace / Remove" };
 
   const f = (state.flows.battery = Object.assign({ step: 0 }, state.flows.battery || {}));
   if (!(f.step >= 0 && f.step < N)) f.step = 0;
@@ -61,11 +62,11 @@
         </div>
         <nav class="flow-nav" id="donebar" hidden>
           ${f.returnTo
-            ? `<button class="btn" id="to-install" style="grid-column:1/-1">${f.returnTo === "content" ? "Back to Update Content" : "Back to Install"}</button>`
+            ? `<button class="btn" id="to-install" style="grid-column:1/-1">${BACK_TO[f.returnTo] || "Back"}</button>`
             : `<button class="btn ghost" id="again">Swap another</button>
           <button class="btn" id="home">Home</button>`}
         </nav>
-        ${f.returnTo ? `<div style="padding:0 16px 12px"><button class="btn ghost" id="to-install-now">${f.returnTo === "content" ? "Back to Update Content" : "Back to Install"}</button></div>` : ""}
+        ${f.returnTo ? `<div style="padding:0 16px 12px"><button class="btn ghost" id="to-install-now">${BACK_TO[f.returnTo] || "Back"}</button></div>` : ""}
       </div>
     </main>`;
   bindHeader();

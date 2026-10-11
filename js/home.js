@@ -7,17 +7,16 @@
   const FLOWS = {
     install: { page: "install", kicker: "Deploy", title: "Install", desc: "Mount, power, pair, and place a new display." },
     content: { page: "content", kicker: "Manage", title: "Update Content", desc: "Choose what shows, push it, confirm the screen changed." },
-    battery: { page: "battery", kicker: "Maintain", title: "Swap Battery" },
-    trouble: { page: "trouble", kicker: "Diagnose", title: "Troubleshoot" },
+    replace: { page: "replace", kicker: "Replace", title: "Replace / Remove" },
+    maint: { page: "maint", kicker: "Maintain", title: "Maintenance" },
   };
 
-  // a swap left mid-way is resumable; say so on the card
-  const b = state.flows.battery;
-  const resume = b && b.step > 0 && b.step < 8 ? `Resume · step ${b.step + 1}` : "";
+  // Maintenance shows how many problems the system can see at this site
+  const nIssues = EC.issues().length;
 
   function card(key, major) {
     const f = FLOWS[key];
-    const art = ECArt.home[key]();
+    const art = ECArt.home[key === "maint" ? "trouble" : key]();
     if (major) {
       return `<button class="action major" data-flow="${key}">
         <span class="copy">
@@ -32,7 +31,7 @@
       </button>`;
     }
     return `<button class="action minor" data-flow="${key}">
-      ${key === "battery" && resume ? `<span class="resume-chip">${resume}</span>` : ""}
+      ${key === "maint" && nIssues ? `<span class="resume-chip">${nIssues} to fix</span>` : ""}
       <span class="kicker">${f.kicker}</span>
       <span class="art" aria-hidden="true">${art}</span>
       <span class="label-row"><span class="title">${f.title}</span>${I.arrow.replace("<svg", '<svg style="width:18px;height:18px;color:var(--tint);flex:none"')}</span>
@@ -51,8 +50,8 @@
       <nav class="actions" aria-label="Tasks">
         ${card("install", true)}
         ${card("content", true)}
-        ${card("battery", false)}
-        ${card("trouble", false)}
+        ${card("replace", false)}
+        ${card("maint", false)}
       </nav>
       <div class="home-foot"><div class="build-stamp">${esc(BUILD)} · ${esc(s.id)}</div></div>
     </main>`;

@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const BUILD = "v0.6.1 · 2026-10-09";
+  const BUILD = "v0.8.0 · 2026-10-11";
 
   /* ---------- fixtures ----------
      Trap cases are deliberate (principle 55). Don't tidy them:
@@ -33,37 +33,72 @@
   const MODEL = { name: "Engage MediaBoard 32W", input: "DC 14.8V 1A", pack: "Li-ion 14.8V 2600mAh 38.48Wh" };
 
   const DEVICES = [
-    { serial: "EGDA0091", siteId: "5624", location: "Front entrance · Left", battery: 8, behavior: "ok" },
-    { serial: "EGDA0107", siteId: "5624", location: "Aisle 12 · Endcap", battery: 14, behavior: "ok" },
-    { serial: "EGDA0112", siteId: "5624", location: "Pharmacy · Counter", battery: 31, behavior: "silent" },
-    { serial: "EGDA0230", siteId: "5642", location: "Grocery · Produce", battery: 22, behavior: "ok" },
-    { serial: "EGDA0301", siteId: "CEC-DAL", location: "Demo wall · Bay 2", battery: 11, behavior: "ok" },
-    { serial: "EGDA0302", siteId: "CEC-DAL", location: "Demo wall · Bay 3", battery: 47, behavior: "silent" },
-    { serial: "EGDA0410", siteId: "0100", location: "Electronics · Endcap", battery: 5, behavior: "ok" },
-    { serial: "EGDA0520", siteId: "0359", location: "Main entrance · Right", battery: 18, behavior: "ok" },
-    { serial: "EGDA0611", siteId: "3305", location: "Seasonal · Front", battery: 9, behavior: "ok" },
-    { serial: "EGDA0712", siteId: "LAB-FAR", location: "Bench · Slot A", battery: 3, behavior: "ok" },
+    { serial: "EGDA0230", siteId: "5642", battery: 22, behavior: "ok" },
+    { serial: "EGDA0301", siteId: "CEC-DAL", battery: 11, behavior: "ok" },
+    { serial: "EGDA0302", siteId: "CEC-DAL", battery: 47, behavior: "silent" },
+    { serial: "EGDA0410", siteId: "0100", battery: 5, behavior: "ok" },
+    { serial: "EGDA0520", siteId: "0359", battery: 18, behavior: "ok" },
+    { serial: "EGDA0611", siteId: "3305", battery: 9, behavior: "ok" },
+    { serial: "EGDA0712", siteId: "LAB-FAR", battery: 3, behavior: "ok" },
   ];
   const SERIAL_LEN = 8; // bezel display ID: 8 alphanumeric characters (spec). The 13-char serial on the rear label is a different number.
 
-  /* ---------- fleet: what each display shows and where it hangs ----------
-     Seed signs for the Update flow. Location is Zone (letters) + Aisle + Section, shown as A15-1.
-     Trap cases (principle 55): …0112 never connects after a push (goes Not confirmed);
-     A16-2 was pushed 2 min ago and is still waiting for a wake; GM102-4 is portrait (can't be batched with landscape). */
-  const SEED = {
-    "EGDA0091": { zone: "A", aisle: "15", section: "1", orient: "landscape", ago: 600, sign: { type: "edlp", priceC: "212", uom: "lb", desc: "Tomatoes on the Vine", plu: "4664", img: "assets/products/tomatoes-on-vine.png" } },
-    "EGDA0107": { zone: "A", aisle: "15", section: "2", orient: "landscape", ago: 600, sign: { type: "rollback", priceC: "119", wasC: "129", uom: "lb", desc: "Navel Oranges", plu: "4013", img: "assets/products/navel-oranges.png" } },
-    "EGDA0112": { zone: "A", aisle: "16", section: "1", orient: "landscape", ago: 30, sign: { type: "edlp", priceC: "58", uom: "lb", desc: "Bananas", plu: "4011", img: "assets/products/bananas.png" } },
-    "EGDA0118": { zone: "A", aisle: "16", section: "2", orient: "landscape", ago: 2, pending: true, sign: { type: "manager", priceC: "67", wasC: "97", uom: "ea", desc: "Hass Avocados", plu: "4225", img: "assets/products/hass-avocados.png" } },
-    "EGDA0124": { zone: "B", aisle: "3", section: "1", orient: "landscape", ago: 900, sign: { type: "clearance", priceC: "212", wasC: "348", uom: "lb", desc: "Pie Pumpkins", plu: "3134", img: "assets/products/pie-pumpkins.png" } },
-    "EGDA0131": { zone: "GM", aisle: "102", section: "4", orient: "portrait", ago: 900, sign: { type: "rollback", priceC: "147", wasC: "198", uom: "lb", desc: "Red Delicious Apples", plu: "4016", img: "assets/products/red-delicious-apples.png" } },
+  /* ---------- demo fleet at Walmart #5624: what each display shows, where it hangs, its last check-in ----------
+     Location is Zone (letters) + Aisle + Section, shown as A15-1. Up to two displays can share one location (produce corners).
+     Every path has something to try (principle 55: these are test cases, don't tidy them):
+       A15-1   two displays, same sign (pair) · …0091 is the comfortable 64% case
+       A15-2   battery 14% → orange, listed in Maintenance
+       A16-1   …0112 battery 4% + weak Wi-Fi, last push never connected → red; Not confirmed; never connects (replace it)
+       A16-2   pushed 2 min ago, still Waiting for wake
+       AP1-1   produce corner pair, same sign
+       AP1-2   produce corner pair, different signs · …0204 battery 9%
+       AP3-2   battery 3% → red
+       B3-2    …0145 woke but still showing the old sign → listed; re-waking fixes it
+       GM102-4, GM102-5  portrait (can't be batched with landscape)
+       A5-100, B3-100, H2-100  endcaps */
+  const P = (n) => `assets/products/${n}.png`;
+  const SG = {
+    tomatoes: { type: "edlp", priceC: "212", uom: "lb", desc: "Tomatoes on the Vine", plu: "4664", img: P("tomatoes-on-vine") },
+    oranges: { type: "rollback", priceC: "119", wasC: "129", uom: "lb", desc: "Navel Oranges", plu: "4013", img: P("navel-oranges") },
+    bananas: { type: "edlp", priceC: "58", uom: "lb", desc: "Bananas", plu: "4011", img: P("bananas") },
+    avocados: { type: "manager", priceC: "67", wasC: "97", uom: "ea", desc: "Hass Avocados", plu: "4225", img: P("hass-avocados") },
+    pumpkins: { type: "clearance", priceC: "212", wasC: "348", uom: "lb", desc: "Pie Pumpkins", plu: "3134", img: P("pie-pumpkins") },
+    apples: { type: "rollback", priceC: "147", wasC: "198", uom: "lb", desc: "Red Delicious Apples", plu: "4016", img: P("red-delicious-apples") },
+    avocadosEdlp: { type: "edlp", priceC: "88", uom: "ea", desc: "Hass Avocados", plu: "4225", img: P("hass-avocados") },
+    orangesEdlp: { type: "edlp", priceC: "98", uom: "ea", desc: "Navel Oranges", plu: "4013", img: P("navel-oranges") },
   };
-  DEVICES.push({ serial: "EGDA0118", siteId: "5624", battery: 40, behavior: "ok" },
-               { serial: "EGDA0124", siteId: "5624", battery: 52, behavior: "ok" },
-               { serial: "EGDA0131", siteId: "5624", battery: 61, behavior: "ok" });
+  // [serial, zone, aisle, section, orient, sign, pushed min ago, battery %, rssi dBm, last seen min ago, extra]
+  const FLEET_5624 = [
+    ["EGDA0091", "A", "15", "1", "landscape", "tomatoes", 600, 64, -58, 9],
+    ["EGDA0140", "A", "15", "1", "landscape", "tomatoes", 600, 71, -61, 9],
+    ["EGDA0107", "A", "15", "2", "landscape", "oranges", 600, 14, -66, 9],
+    ["EGDA0112", "A", "16", "1", "landscape", "bananas", 30, 4, -86, 2880, { behavior: "silent" }],
+    ["EGDA0118", "A", "16", "2", "landscape", "avocados", 2, 40, -74, 1440, { pending: true }],
+    ["EGDA0150", "A", "5", "100", "landscape", "orangesEdlp", 1300, 82, -60, 1299],
+    ["EGDA0201", "AP", "1", "1", "landscape", "bananas", 700, 90, -57, 699],
+    ["EGDA0202", "AP", "1", "1", "landscape", "bananas", 700, 88, -59, 699],
+    ["EGDA0203", "AP", "1", "2", "landscape", "avocadosEdlp", 700, 76, -63, 699],
+    ["EGDA0204", "AP", "1", "2", "landscape", "oranges", 700, 9, -70, 699],
+    ["EGDA0205", "AP", "2", "4", "landscape", "tomatoes", 700, 58, -62, 699],
+    ["EGDA0206", "AP", "3", "2", "landscape", "pumpkins", 700, 3, -65, 699],
+    ["EGDA0124", "B", "3", "1", "landscape", "pumpkins", 900, 52, -61, 899],
+    ["EGDA0145", "B", "3", "2", "landscape", "apples", 40, 45, -68, 38, { stuck: true }],
+    ["EGDA0151", "B", "3", "100", "landscape", "pumpkins", 900, 67, -71, 899],
+    ["EGDA0131", "GM", "102", "4", "portrait", "apples", 900, 87, -55, 899],
+    ["EGDA0153", "GM", "102", "5", "portrait", "bananas", 900, 79, -64, 899],
+    ["EGDA0152", "H", "2", "100", "landscape", "avocados", 900, 73, -58, 899],
+  ];
+  const SEED = {};
+  FLEET_5624.forEach(([serial, zone, aisle, section, orient, sign, ago, battery, rssi, seen, x = {}]) => {
+    SEED[serial] = Object.assign({ zone, aisle, section, orient, ago, sign: SG[sign] }, x);
+    DEVICES.push({ serial, siteId: "5624", battery, rssi, seen, behavior: x.behavior || "ok" });
+  });
+  /* Last check-in (battery, Wi-Fi strength) is reported each time a display connects. The app is never live with a display:
+     it shows the last known values and how old they are. */
 
   const NOT_CONFIRMED_MIN = 7;   // no Wi-Fi connection this long after a push → Not confirmed
-  const CONNECT_DEMO_SEC = 25;   // prototype only: a woken display "connects" this long after its push
+  const CONNECT_DEMO_SEC = 25;   // prototype only: a woken display "connects" this long after its push or fix
+  const LOC_MAX = 2;             // displays allowed at one location
 
   /* ---------- session state (shared across pages) ---------- */
   const KEY = "engage-companion";
@@ -71,26 +106,42 @@
   // localStorage, not sessionStorage: an installed app is closed and reopened all day; progress must survive that
   try { state = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { state = {}; }
   state = Object.assign({ user: null, chainId: "WMT", siteId: null, flows: {} }, state);
+  if (state.demo !== 2) { state.fleet = {}; state.removed = {}; state.checkins = {}; state.flows = {}; state.demo = 2; } // demo data reshaped in v0.8.0
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
 
   const allSites = () => CHAINS.flatMap((c) => c.sites.map((s) => ({ ...s, chainId: c.id, chain: c.name })));
   const site = (id = state.siteId) => allSites().find((s) => s.id === id) || null;
 
-  /* fleet for a site: seed + installs + pushes made this session (all kept in session state) */
+  /* fleet for a site: seed + installs + pushes + fixes made in the app (kept on the phone) */
   function fleet(siteId = state.siteId) {
     const now = Date.now();
     const out = [];
+    const removed = state.removed || {};
     DEVICES.filter((d) => d.siteId === siteId && SEED[d.serial]).forEach((d) => {
       const seed = SEED[d.serial];
-      const base = { serial: d.serial, behavior: d.behavior, zone: seed.zone, aisle: seed.aisle, section: seed.section, orient: seed.orient, sign: seed.sign,
-        pushedAt: now - seed.ago * 60000, connectedAt: seed.pending || d.behavior === "silent" ? null : now - (seed.ago - 1) * 60000 };
+      const base = { serial: d.serial, siteId, behavior: d.behavior, zone: seed.zone, aisle: seed.aisle, section: seed.section, orient: seed.orient, sign: seed.sign,
+        pushedAt: now - seed.ago * 60000, connectedAt: seed.pending || seed.stuck || d.behavior === "silent" ? null : now - (seed.ago - 1) * 60000,
+        stuck: !!seed.stuck, battery: d.battery, rssi: d.rssi, seenAt: d.seen != null ? now - d.seen * 60000 : null };
       out.push(Object.assign(base, (state.fleet || {})[d.serial] || {}));
     });
     Object.values(state.fleet || {}).forEach((d) => { if (d.siteId === siteId && !out.some((o) => o.serial === d.serial)) out.push(d); });
-    return out.map((d) => Object.assign({}, d, { status: statusOf(d, now) }));
+    return out.filter((d) => !removed[d.serial]).map((d) => {
+      const r = Object.assign({}, d, { status: statusOf(d, now) });
+      // prototype: a display that "connects" after a wake reports a fresh check-in (a new install reports a full battery)
+      if (r.status === "updated" && r.woken && r.behavior !== "silent") {
+        const at = r.pushedAt + CONNECT_DEMO_SEC * 1000;
+        if (!r.seenAt || at > r.seenAt) Object.assign(r, { seenAt: at, battery: r.battery ?? 100, rssi: r.rssi ?? -60 });
+      }
+      // prototype: a fix in Maintenance (battery swapped, re-woken) reports in a little later
+      const ck = (state.checkins || {})[r.serial];
+      if (ck && now >= ck.at) { Object.assign(r, ck.patch, { seenAt: ck.at }); r.status = statusOf(r, now); }
+      return r;
+    });
   }
-  /* Sent → Waiting for wake → Updated; Not confirmed once 7 min pass with no connection */
+  /* Sent → Waiting for wake → Updated; Not confirmed once 7 min pass with no connection.
+     A display that woke but still shows the old sign ("stuck") is never Updated. */
   function statusOf(d, now = Date.now()) {
+    if (d.stuck) return "unconfirmed";
     if (d.connectedAt && d.connectedAt >= d.pushedAt) return "updated";
     if (d.behavior !== "silent" && d.woken && now - d.pushedAt >= CONNECT_DEMO_SEC * 1000) return "updated";
     return now - d.pushedAt >= NOT_CONFIRMED_MIN * 60000 ? "unconfirmed" : "waiting";
@@ -100,7 +151,7 @@
     updated: { word: "Updated", cls: "confirmed" },
     unconfirmed: { word: "Not confirmed", cls: "rejected" },
   };
-  /* record a push (Install or Update). meta carries location/orientation for new installs */
+  /* record a push (Install, Update, Replace). meta carries location/orientation for new displays */
   function recordPush(serials, sign, meta = {}) {
     state.fleet = state.fleet || {};
     const now = Date.now();
@@ -108,8 +159,10 @@
       const known = (DEVICES.find((d) => d.serial === sn) || {});
       const prev = fleet().find((d) => d.serial === sn) || {};
       state.fleet[sn] = Object.assign({ serial: sn, siteId: state.siteId, behavior: known.behavior || "ok" },
-        prev, meta[sn] || {}, { sign: Object.assign({}, sign), pushedAt: now, connectedAt: null, woken: false });
+        prev, meta[sn] || {}, { sign: Object.assign({}, sign), pushedAt: now, connectedAt: null, woken: false, stuck: false });
       delete state.fleet[sn].status;
+      if (state.checkins) delete state.checkins[sn];
+      if (state.removed) delete state.removed[sn];
     });
     save();
   }
@@ -122,10 +175,78 @@
     delete state.fleet[sn].status;
     save();
   }
+  /* prototype: after a fix, the display reports in CONNECT_DEMO_SEC later with these values (silent displays never do) */
+  function expectCheckin(sn, patch) {
+    const d = fleet().find((x) => x.serial === sn);
+    if (!d || d.behavior === "silent") return;
+    state.checkins = state.checkins || {};
+    state.checkins[sn] = { at: Date.now() + CONNECT_DEMO_SEC * 1000, patch };
+    save();
+  }
+  /* take a display off its location (Remove, or the old one in a Replace) */
+  function removeDisplay(sn) {
+    state.removed = state.removed || {};
+    state.removed[sn] = Date.now();
+    if (state.fleet) delete state.fleet[sn];
+    save();
+  }
+  const locKey = (d) => `${d.zone}${d.aisle}-${d.section}`;
+  const atLocation = (key, siteId = state.siteId) => fleet(siteId).filter((d) => locKey(d) === key);
+
+  /* ---------- Maintenance: problems the system can see (cleared when the display reports them fixed) ----------
+     Battery low (15% or less) · Woke but didn't take its sign · Not confirmed. Weak Wi-Fi is not listed (nothing to fix in the field). */
+  const ISSUE = {
+    battery: { word: "Battery low", fix: "Swap the battery" },
+    stuck: { word: "Woke but didn’t take its sign", fix: "Wake it again" },
+    unconfirmed: { word: "Sign not confirmed", fix: "Wake it again" },
+  };
+  function issues(siteId = state.siteId) {
+    const out = [];
+    fleet(siteId).forEach((d) => {
+      if (d.battery != null && d.battery <= 15) out.push({ type: "battery", d });
+      if (d.stuck) out.push({ type: "stuck", d });
+      else if (d.status === "unconfirmed") out.push({ type: "unconfirmed", d });
+    });
+    return out;
+  }
   const locCode = (d) => `${d.zone}${d.aisle}-${d.section}`;
 
+  /* ---------- last check-in: battery + Wi-Fi ----------
+     Battery: 15% or less orange, 5% or less red. Wi-Fi (RSSI, dBm): below −76 is Weak (red); otherwise Good, Strong at −60 or better.
+     Color is never alone: the number and the word always show. */
+  const BATT_WARN = 15, BATT_BAD = 5;
+  const battLevel = (p) => (p == null ? null : p <= BATT_BAD ? "bad" : p <= BATT_WARN ? "warn" : "ok");
+  function wifiOf(rssi) {
+    if (rssi == null) return null;
+    if (rssi >= -60) return { bars: 4, word: "Strong", l: "ok" };
+    if (rssi >= -68) return { bars: 3, word: "Good", l: "ok" };
+    if (rssi >= -76) return { bars: 2, word: "Good", l: "ok" };
+    return { bars: 1, word: "Weak", l: "bad" };
+  }
+  function ago(ts, now = Date.now()) {
+    if (!ts) return "";
+    const m = Math.round((now - ts) / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `${h} h ago`;
+    return `${Math.round(h / 24)} days ago`;
+  }
+  const battIcon = (p) => `<svg viewBox="0 0 26 14" aria-hidden="true"><rect x="1" y="1" width="21" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="23" y="4.5" width="2.2" height="5" rx="1" fill="currentColor"/><rect x="3" y="3" width="${Math.max(1.5, 17 * Math.min(100, p) / 100).toFixed(1)}" height="8" rx="1.2" fill="currentColor"/></svg>`;
+  const wifiIcon = (n) => `<svg viewBox="0 0 22 14" aria-hidden="true">${[0, 1, 2, 3].map((i) => `<rect x="${i * 5.6 + 1}" y="${12 - (i + 1) * 3}" width="3.6" height="${(i + 1) * 3}" rx="1" fill="currentColor" opacity="${i < n ? 1 : 0.22}"/>`).join("")}</svg>`;
+  /* battery + Wi-Fi readout; withAge adds "2 h ago" */
+  function health(d, { withAge = false } = {}) {
+    if (d.battery == null && d.rssi == null) return `<span class="health"><span class="note">No check-in yet</span></span>`;
+    const bl = battLevel(d.battery), w = wifiOf(d.rssi);
+    return `<span class="health">
+      ${d.battery != null ? `<span class="hb" data-l="${bl}" aria-label="Battery ${d.battery}% at last check-in">${battIcon(d.battery)}${d.battery}%</span>` : ""}
+      ${w ? `<span class="hw" data-l="${w.l}" aria-label="Wi-Fi ${w.word} at last check-in">${wifiIcon(w.bars)}${w.word}</span>` : ""}
+      ${withAge && d.seenAt ? `<span class="note">${ago(d.seenAt)}</span>` : ""}
+    </span>`;
+  }
+
   /* ---------- navigation ---------- */
-  const PAGES = { login: "login.html", site: "site.html", home: "home.html", install: "install.html", content: "content.html", battery: "battery.html", trouble: "troubleshoot.html" };
+  const PAGES = { login: "login.html", site: "site.html", home: "home.html", install: "install.html", content: "content.html", battery: "battery.html", replace: "replace.html", maint: "maintenance.html", trouble: "troubleshoot.html" };
   const go = (page) => { save(); location.href = PAGES[page] || page; };
 
   /** Redirect if prerequisites are missing. Returns false when it redirected. */
@@ -249,5 +370,5 @@
     document.body.appendChild(el);
   });
 
-  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, locCode, NOT_CONFIRMED_MIN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
+  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, expectCheckin, removeDisplay, locKey, atLocation, LOC_MAX, ISSUE, issues, locCode, BATT_WARN, BATT_BAD, battLevel, wifiOf, ago, health, NOT_CONFIRMED_MIN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
 })();

@@ -279,6 +279,8 @@ button { cursor: pointer; }
 .action[data-flow="content"] { background: var(--card-content); --tint: var(--tint-content); }
 .action[data-flow="battery"] { background: var(--card-battery); --tint: var(--tint-battery); }
 .action[data-flow="trouble"] { background: var(--card-trouble); --tint: var(--tint-trouble); }
+.action[data-flow="replace"] { background: var(--card-battery); --tint: var(--tint-battery); }
+.action[data-flow="maint"] { background: var(--card-trouble); --tint: var(--tint-trouble); }
 
 .action .copy { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; flex: 1 1 52%; z-index: 1; }
 .action .kicker {
@@ -687,3 +689,86 @@ details.demo .chip-row { margin-top: 8px; }
 .scan-top .viewfinder { padding: 0; }
 .scan-top .cam-fail { border-radius: 0; min-height: 160px; justify-content: center; }
 .scan-top .cam-state { padding: 8px 16px; color: #c9ced6; background: var(--hw-frame); }
+
+/* ---------- v0.7.0: where to find the location (Install › Location) ---------- */
+.locate { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); }
+.locate-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.locate-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px; border: 0; background: none; font: 700 15px/1 var(--f-display); color: var(--fg); }
+.locate-toggle .caret svg { width: 16px; height: 16px; transition: transform .15s; }
+.locate[data-open="true"] .locate-toggle .caret svg { transform: rotate(90deg); }
+.locate[data-open="false"] .locate-body { display: none; }
+.locate-body { display: flex; flex-direction: column; gap: 10px; }
+.locate-art svg { width: 100%; height: auto; display: block; max-height: 168px; }
+/* while a field is being typed, keep the drawing and drop the words so the lit-up part stays on screen */
+.locate[data-typed] .lines { display: none; } /* once typing starts the words stay hidden: no layout jump when a field loses focus */
+.locate .lines li { font-size: 15px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--surface-2); }
+.seg button { min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: none; font: 700 14px/1 var(--f-body); color: var(--fg-2); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 3px rgba(20, 32, 51, .15); }
+.locate .hl { opacity: 0; transition: opacity .12s; }
+.locate .cl { fill: var(--fg-2); }
+.locate[data-focus="zone"] [data-part="zone"] .hl, .locate[data-focus="aisle"] [data-part="aisle"] .hl, .locate[data-focus="section"] [data-part="section"] .hl { opacity: 1; }
+.locate[data-focus="zone"] [data-part="zone"] .cl, .locate[data-focus="aisle"] [data-part="aisle"] .cl, .locate[data-focus="section"] [data-part="section"] .cl { fill: var(--tint); font-weight: 800; }
+
+/* ---------- v0.7.0: last check-in (battery + Wi-Fi), never live ---------- */
+.health { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font: 700 13px/1 var(--f-body); }
+.health .hb, .health .hw { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-2); }
+.health svg { height: 13px; width: auto; flex: none; }
+.health [data-l="warn"] { color: var(--warn); }
+.health [data-l="bad"] { color: var(--bad); }
+.health .note { font-weight: 500; }
+.dev-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.checkin { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: var(--r-ctl); border: 1px solid var(--line); background: var(--surface); }
+.checkin h3 { margin: 0; font: 700 13px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--fg-2); }
+.ck-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; }
+.ck-where { display: flex; flex-direction: column; gap: 2px; }
+.ck-where .note { font-size: 12px; }
+.checkin .health { font-size: 15px; }
+.checkin .health svg { height: 15px; }
+
+/* ---------- v0.8.0: Replace / Remove, Maintenance, shared locations ---------- */
+.flow-nav.solo { grid-template-columns: 1fr; }
+.btn.danger { background: var(--bad); color: var(--bad-ink); }
+.status.neutral { background: var(--surface-2); color: var(--fg-2); }
+.choice-list { display: flex; flex-direction: column; gap: 10px; }
+.choice { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; align-items: center; gap: 2px 10px; width: 100%; min-height: 64px; padding: 14px 16px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); text-align: left; color: var(--fg); }
+.choice .choice-t { font: 700 17px/1.25 var(--f-display); grid-column: 1; }
+.choice .note { grid-column: 1; font-size: 14px; }
+.choice > svg { grid-column: 2; grid-row: 1 / span 2; width: 20px; height: 20px; color: var(--tint); }
+.choice.big { min-height: 84px; background: var(--card-trouble); border-color: transparent; }
+.choice.danger .choice-t { color: var(--bad); }
+.move-card { display: flex; flex-direction: column; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); }
+.move-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.move-row:first-child { border-top: 0; }
+.move-row b { font-size: 17px; }
+.pick-list { display: flex; flex-direction: column; gap: 12px; }
+.pick-zone { border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+.pick-zone-name { display: block; padding: 12px 14px 8px; font: 700 15px/1 var(--f-display); }
+.pick-dev { padding-left: 12px; }
+.pick-dev .row-go { width: 18px; height: 18px; flex: none; color: var(--fg-3); }
+.pair-tag { margin-left: 8px; padding: 2px 6px; border-radius: 6px; background: var(--surface-2); font: 700 11px/1.3 var(--f-body); color: var(--fg-2); vertical-align: middle; }
+.fix-group { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); }
+.fix-head { display: flex; align-items: center; justify-content: space-between; font-size: 16px; }
+.fix-n { min-width: 26px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); text-align: center; font: 700 13px/1.2 var(--f-body); }
+.fix-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; color: var(--fg); }
+.fix-row .ck-where { min-width: 72px; }
+.fix-detail { flex: 1; min-width: 0; display: flex; justify-content: flex-end; text-align: right; }
+.fix-row > svg { width: 18px; height: 18px; flex: none; color: var(--fg-3); }
+.hint-row.as-note.ok { background: var(--ok-soft); }
+.hint-row.as-note.ok svg { color: var(--ok); }
+.q { margin: 4px 0 0; font: 700 19px/1.3 var(--f-display); }
+.yes-no { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.yes-no .btn { height: 56px; font-size: 17px; }
+.loc-conflict { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--r-card); border: 1px solid var(--line); background: var(--surface); }
+.loc-conflict p { margin: 0; font-weight: 600; }
+.opt { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 12px; border-radius: var(--r-ctl); border: 1px solid var(--line); background: var(--surface); text-align: left; font: 600 16px/1.3 var(--f-body); color: var(--fg); }
+.opt[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 2px var(--fg) inset; }
+.opt .radio-dot { width: 20px; height: 20px; flex: none; border-radius: 50%; border: 2px solid var(--line); }
+.opt[aria-pressed="true"] .radio-dot { border: 6px solid var(--fg); }
+.sheet .opt-list { display: flex; flex-direction: column; gap: 10px; }
+
+.thumb-pair { display: flex; flex-direction: column; gap: 4px; flex: none; }
+.thumb-pair .thumb { width: 78px; }
+.tree-dev .check .part { display: block; width: 10px; height: 3px; border-radius: 2px; background: var(--accent); }
+.tree-dev.pair .dev-line .note { min-width: 74px; }
+.dev-meta .note.wrap { white-space: normal; overflow: visible; }

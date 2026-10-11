@@ -40,3 +40,6 @@ Licensed Bogle: drop `Bogle-Bold.woff2` into `fonts/` and add it to `ASSETS` in 
 - Login is faked. Site and display data are fixtures in `js/core.js` (trap cases are deliberate; don't tidy them).
 - The preview build is simulated (2.5–4.5 s). Add `?slowpreview` to a URL to see the 30-second timeout.
 - A woken display "connects" 25 s after its push; display `EGDA0112` never does (shows Not confirmed after 7 min).
+- Demo fleet at Walmart #5624 (`js/core.js`, FLEET_5624): 18 displays set up so every path has something to try: produce corner pairs (AP1-1 same sign, AP1-2 different signs), low batteries (A15-2 14%, AP1-2 9%, AP3-2 3%, A16-1 4%), a display that woke but kept its old sign (B3-2), one that never confirms (A16-1), portrait displays (GM102-4/-5), endcaps (A5-100, B3-100, H2-100).
+- Fixes in Maintenance "report in" 25 s later (battery 100%, sign confirmed). `EGDA0112` never reports, so guided help on it ends in Replace.
+- Opening a v0.8.0 build resets older saved demo data once.

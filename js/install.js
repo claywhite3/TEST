@@ -7,7 +7,7 @@
   const { state, save, site, go, guard, esc, I, header, bindHeader, haptic, DEVICES, SERIAL_LEN } = EC;
   if (!guard()) return;
 
-  const FLOW_V = 4; // bump when the saved shape changes; older in-progress installs restart
+  const FLOW_V = 4; // v0.7.0 adds locKind/locGuide with defaults (older saves still load) // bump when the saved shape changes; older in-progress installs restart
 
   /* ---------- sign headers (colors sampled from the store sign files) ---------- */
   const SPARK = '<svg class="spark" viewBox="-16 -16 32 32" aria-hidden="true"><g fill="currentColor">' +
@@ -65,6 +65,7 @@
   const fresh = () => ({
     v: FLOW_V, step: "battery", battSlide: 0, orient: "landscape", multi: false, devices: [], locIdx: 0, wakeIdx: 0, wakeSlide: 0,
     type: null, desc: "", plu: "", img: "", priceC: "", size: "", uom: "", wasC: "", lastZone: "", lastAisle: "", reject: null,
+    locKind: "endcap", locGuide: true,
   });
   let f = state.flows.install;
   if (!f || f.v !== FLOW_V) f = fresh();
@@ -108,7 +109,7 @@
     const d = f.devices[f.locIdx];
     switch (f.step) {
       case "scan": return f.devices.length > 0;
-      case "location": return !!(d && locOk(d));
+      case "location": return !!(d && locOk(d) && conflictOk(f.locIdx));
       case "type": return !!f.type;
       case "details": {
         const t = typeOf();
@@ -146,6 +147,7 @@
       const meta = {};
       f.devices.forEach((d) => { meta[d.serial] = { zone: d.zone, aisle: d.aisle, section: d.section, orient: f.orient, siteId: s.id }; });
       EC.recordPush(f.devices.map((d) => d.serial), signOpts(), meta);
+      f.devices.forEach((d) => { if (d.locMode === "replace" && d.replaces) EC.removeDisplay(d.replaces); });
       haptic(); f.wakeIdx = 0; f.wakeSlide = 0; return setStep("wake");
     }
     if (f.step === "wake") EC.markWoken(f.devices[f.wakeIdx].serial);
@@ -180,6 +182,9 @@
     if (known && known.siteId !== s.id) {
       const other = EC.site(known.siteId);
       f.reject = { serial, why: `Registered to ${other ? other.name : "another site"}.` };
+    } else if (EC.fleet().some((d) => d.serial === serial)) {
+      const inst = EC.fleet().find((d) => d.serial === serial);
+      f.reject = { serial, why: `Already installed at ${EC.locKey(inst)}. To move or swap it, use Replace / Remove.` };
     } else if (serial.endsWith("9999")) {
       f.reject = { serial, why: "Not registered. This display can’t take content yet." };
     } else if (f.devices.some((d) => d.serial === serial)) {
@@ -376,6 +381,67 @@
     }));
   }
 
+  /* ---------- a location already taken: another display here, or replacing one (two per location at most) ---------- */
+  function occupancy(i) {
+    const d = f.devices[i];
+    if (!d || !locOk(d)) return null;
+    const key = loc(d);
+    const replacedByOthers = f.devices.filter((x, j) => j !== i && x.locMode === "replace").map((x) => x.replaces);
+    const existing = EC.atLocation(key).filter((x) => !replacedByOthers.includes(x.serial));
+    const batch = f.devices.filter((x, j) => j !== i && locOk(x) && loc(x) === key);
+    return { key, existing, batch, used: existing.length + batch.length };
+  }
+  function conflictOk(i) {
+    const o = occupancy(i), d = f.devices[i];
+    if (!o || !o.used) return true;
+    if (d.locKey !== o.key) return false;
+    if (o.used >= EC.LOC_MAX) return d.locMode === "replace" && o.existing.some((x) => x.serial === d.replaces);
+    return d.locMode === "add" || (d.locMode === "replace" && o.existing.some((x) => x.serial === d.replaces));
+  }
+  function conflictHtml() {
+    const i = f.locIdx, d = f.devices[i], o = occupancy(i);
+    if (!o || !o.used) { if (d) { delete d.locMode; delete d.replaces; delete d.locKey; } return ""; }
+    if (d.locKey !== o.key) { delete d.locMode; delete d.replaces; d.locKey = o.key; }
+    if (o.used >= EC.LOC_MAX && !o.existing.length) {
+      return `<div class="result bad" role="alert"><strong class="mono">${esc(o.key)}</strong><p>Two displays from this install already go here. That’s the limit. Use a different location.</p></div>`;
+    }
+    const names = [...o.existing.map((x) => x.serial), ...o.batch.map((x) => `${x.serial} (this install)`)].join(" and ");
+    const opt = (attrs, on, text) => `<button class="opt" ${attrs} aria-pressed="${on}"><span class="radio-dot"></span><span>${text}</span></button>`;
+    const replaceOpts = o.existing.map((x) => opt(`data-replace="${x.serial}"`, d.locMode === "replace" && d.replaces === x.serial, `Replacing <b class="mono">${esc(x.serial)}</b>`)).join("");
+    if (o.used >= EC.LOC_MAX) return `<div class="loc-conflict"><p>${esc(o.key)} already has two displays. That’s the limit. Is this one replacing one of them?</p>${replaceOpts}</div>`;
+    return `<div class="loc-conflict"><p>${esc(o.key)} already has ${esc(names)}. Is this one…</p>
+      ${opt('data-locmode="add"', d.locMode === "add", "Another display here")}
+      ${replaceOpts}</div>`;
+  }
+  function paintConflict() {
+    const box = $("loc-conflict"); if (!box) return;
+    box.innerHTML = conflictHtml(); save();
+    box.querySelectorAll("[data-locmode]").forEach((b) => b.onclick = () => { const d = f.devices[f.locIdx]; d.locMode = "add"; delete d.replaces; paintConflict(); refreshNext(); });
+    box.querySelectorAll("[data-replace]").forEach((b) => b.onclick = () => { const d = f.devices[f.locIdx]; d.locMode = "replace"; d.replaces = b.dataset.replace; paintConflict(); refreshNext(); });
+    refreshNext();
+  }
+
+  /* where to find the location: endcap or produce drawing; the field being typed lights up its part */
+  const LOC_LINES = {
+    endcap: ["Read the blue strip on the end of the shelf, top to bottom.", "The white label says the same: big number is Section, Zone is over Aisle.", "The big aisle number on the sign is not the location."],
+    produce: ["Read the blue strip on the table’s corner post, top to bottom.", "The white label on the table edge says the same: big number is Section, Zone is over Aisle."],
+  };
+  function locateGuide() {
+    const k = f.locKind === "produce" ? "produce" : "endcap";
+    return `<section class="locate" id="locate" data-open="${f.locGuide}" data-focus="">
+      <div class="locate-head">
+        <button class="locate-toggle" id="loc-guide" aria-expanded="${f.locGuide}"><span class="caret">${I.next}</span>Where to find it</button>
+        <div class="seg" role="group" aria-label="Fixture">
+          ${["endcap", "produce"].map((x) => `<button data-lockind="${x}" aria-pressed="${k === x}">${x === "endcap" ? "Endcap" : "Produce"}</button>`).join("")}
+        </div>
+      </div>
+      <div class="locate-body">
+        <div class="locate-art">${ECArt.locate(k)}</div>
+        <ul class="lines">${LOC_LINES[k].map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+      </div>
+    </section>`;
+  }
+
   function body() {
     switch (f.step) {
       case "battery": return `
@@ -414,13 +480,15 @@
         const n = f.devices.length;
         return `
           ${n > 1 ? `<div class="progress">${f.devices.map((_, i) => `<i class="${i < f.locIdx ? "done" : i === f.locIdx ? "now" : ""}"></i>`).join("")}</div>` : ""}
+          ${locateGuide()}
           <div class="field"><label for="loc-zone">Zone <span class="hint">1–2 letters</span></label>
             <input class="input big" id="loc-zone" data-loc="zone" value="${esc(d.zone)}" maxlength="2" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" /></div>
           <div class="field"><label for="loc-aisle">Aisle <span class="hint">up to 3 digits</span></label>
             <input class="input big" id="loc-aisle" data-loc="aisle" value="${esc(d.aisle)}" maxlength="3" autocomplete="off" inputmode="numeric" pattern="[0-9]*" /></div>
           <div class="field"><label for="loc-section">Section <span class="hint">up to 3 digits</span></label>
             <input class="input big" id="loc-section" data-loc="section" value="${esc(d.section)}" maxlength="3" autocomplete="off" inputmode="numeric" pattern="[0-9]*" /></div>
-          <div class="loc-code"><span class="note">Location</span><b class="mono" id="loc-code">${esc(loc(d))}</b></div>`;
+          <div class="loc-code"><span class="note">Location</span><b class="mono" id="loc-code">${esc(loc(d))}</b></div>
+          <div id="loc-conflict">${conflictHtml()}</div>`;
       }
 
       case "type": return `<div class="sign-list">${TYPES.map((t) => `
@@ -466,7 +534,7 @@
           <div class="device-card"><div class="head">
             <span><span class="mono" style="font-weight:700">${esc(d.serial)}</span><br><span class="note">${esc(loc(d))}</span></span>
             <span class="status pending">${I.clock}Updating</span>
-          </div></div>`).join("")}</div>
+          </div>${d.locMode === "replace" && d.replaces ? `<p class="note" style="margin:8px 0 0">Replaced ${esc(d.replaces)}. Put it in the back room where the new displays are kept, battery still in. Someone will be by to collect it.</p>` : ""}</div>`).join("")}</div>
         <p class="note">Each display updates in 3–5 minutes.</p>
         <button class="btn" id="again">Install next display</button>
         <button class="btn ghost" id="home">Home</button>`;
@@ -627,6 +695,22 @@
       f.orient = b.dataset.orient; save(); render();
     }));
 
+    // location guide: fixture switch, show/hide, and the field being typed lights up its part of the drawing
+    function bindLocate() {
+      document.querySelectorAll("[data-lockind]").forEach((b) => b.onclick = () => {
+        f.locKind = b.dataset.lockind; f.locGuide = true; save();
+        $("locate").outerHTML = locateGuide(); bindLocate();
+      });
+      const t = $("loc-guide");
+      if (t) t.onclick = () => { f.locGuide = !f.locGuide; save(); $("locate").dataset.open = f.locGuide; t.setAttribute("aria-expanded", f.locGuide); };
+    }
+    bindLocate();
+    if (f.step === "location") paintConflict();
+    document.querySelectorAll("[data-loc]").forEach((inp) => {
+      inp.addEventListener("focus", () => { const g = $("locate"); if (g) { g.dataset.focus = inp.dataset.loc; g.dataset.typed = "1"; } });
+      inp.addEventListener("blur", () => { const g = $("locate"); if (g) g.dataset.focus = ""; });
+    });
+
     // location: Zone letters only (caps), Aisle/Section digits only
     document.querySelectorAll("[data-loc]").forEach((inp) => inp.addEventListener("input", () => {
       const k = inp.dataset.loc;
@@ -634,6 +718,7 @@
       if (inp.value !== v) inp.value = v;
       f.devices[f.locIdx][k] = v; save();
       $("loc-code").textContent = loc(f.devices[f.locIdx]);
+      paintConflict();
       refreshNext();
     }));
 
@@ -690,7 +775,7 @@
     bindWake();
 
     $("again")?.addEventListener("click", () => {
-      const keep = { lastZone: f.lastZone, lastAisle: f.lastAisle, orient: f.orient };
+      const keep = { lastZone: f.lastZone, lastAisle: f.lastAisle, orient: f.orient, locKind: f.locKind, locGuide: f.locGuide };
       f = state.flows.install = Object.assign(fresh(), keep, { step: "scan" });
       save(); render();
     });
