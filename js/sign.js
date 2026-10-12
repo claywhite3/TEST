@@ -7,7 +7,10 @@
   "use strict";
 
   const F_PRICE = '"SignPrice", "Helvetica Neue", Helvetica, Arial, sans-serif'; // SignPrice = bundled Helvetica-metric font (fonts/)
-  const F_WORDS = '"Bogle", "Figtree", "Helvetica Neue", Arial, sans-serif';
+  const F_BASE = '"Figtree", "Helvetica Neue", Arial, sans-serif';
+  // the customer's own font (Bogle for Walmart) only on that customer's signs, only when they've provided it
+  let F_WORDS = F_BASE;
+  const pickFont = () => { const f = window.EC && EC.signFont ? EC.signFont() : ""; F_WORDS = f ? `"${f}", ${F_BASE}` : F_BASE; };
 
   const HEAD = {
     edlp: { label: ["Everyday Low Price"], portrait: ["Everyday", "Low Price"], bg: "#1358a8", fg: "#ffffff", spark: "#ffc220", weight: 400, was: false },
@@ -106,32 +109,42 @@
     return out;
   }
 
-  function price(g, c, uom) {
+  function price(g, c, uom, hasImg) {
     const p = parts(c);
     const unit = uom === "lb" ? "/lb" : "";
     const each = uom === "ea" ? "each" : "";
-    // dollars shrink only as much as needed for the price to fit
+    const below = each || (unit && !g.unit.beside ? unit : "");
+    // the price block as laid out on the sign file (scale 1), measured from its left edge and cap top
+    const x0 = g.cur.x, top = g.capTop;
     const curW = p.cur ? (g.dolX ? g.dolX - g.cur.x : width("$", g.cur.fs, F_PRICE) + g.gap) : 0;
-    const dolW1 = width(p.dol, 1, F_PRICE) - g.kern;       // per px of font size
+    const dolW = (width(p.dol, 1, F_PRICE) - g.kern) * g.dol.fs;
     const cls = g.cents.ls || 0;
     const centsW = width(p.cents, g.cents.fs, F_PRICE, 700, cls);
-    const unitW = unit && g.unit.beside ? width(unit, g.unit.fs, F_PRICE, 400) - 0.11 * g.cents.fs : 0;
-    const startX = p.cur ? g.cur.x : g.cur.x;
-    let fs = g.dol.fs;
-    const right = startX + curW + dolW1 * fs + centsW + unitW;
-    if (right > g.maxRight) fs = Math.max(g.dol.fs * 0.35, (g.maxRight - startX - curW - centsW - unitW) / dolW1);
-    const base = g.capTop + 0.717 * fs;
-    const dolX = startX + curW;
-    const centsX = dolX + dolW1 * fs;
-    let out = "";
-    if (p.cur) out += `<text x="${g.cur.x}" y="${g.cur.base}" font-family='${F_PRICE}' font-weight="700" font-size="${g.cur.fs}" fill="#fff">$</text>`;
-    out += `<text x="${dolX.toFixed(1)}" y="${base.toFixed(1)}" font-family='${F_PRICE}' font-weight="700" font-size="${fs.toFixed(1)}" fill="#fff">${esc(p.dol)}</text>`;
-    out += `<text x="${centsX.toFixed(1)}" y="${g.cents.base}" font-family='${F_PRICE}' font-weight="700" font-size="${g.cents.fs}" letter-spacing="${(cls * g.cents.fs).toFixed(1)}" fill="#fff">${esc(p.cents)}</text>`;
-    if (unit && g.unit.beside) {
-      out += `<text x="${(centsX + centsW - 0.11 * g.cents.fs).toFixed(1)}" y="${g.unit.base || g.cents.base}" font-family='${F_PRICE}' font-weight="400" font-size="${g.unit.fs}" fill="#fff">${unit}</text>`;
+    const unitGap = 0.04 * g.cents.fs; // a clear gap between the cents (or ¢) and /lb, as on the sign file
+    const unitW = unit && g.unit.beside ? unitGap + width(unit, g.unit.fs, F_PRICE, 400) : 0;
+    const belowW = below ? width(below, g.each.fs, F_WORDS, g.each.weight || 500) : 0;
+    const centsX1 = x0 + curW + dolW;
+    const right1 = centsX1 + centsW + unitW;                 // top row: $ dollars cents /lb
+    const belowX1 = centsX1 + g.kern * g.dol.fs + g.each.dx;   // starts past the dollars' last digit, not inside its kerning
+    const belowR1 = belowX1 + belowW;              // "each" (or /lb) under the cents
+    const dolBottom1 = top + 0.717 * g.dol.fs;
+    // when it doesn't fit, the whole block shrinks together (keeps the sign's proportions):
+    // nothing past the canvas edge, and nothing that reaches down into the picture's rows overlaps the picture
+    const fitK = (r, limit) => (r > limit ? (limit - x0) / (r - x0) : 1);
+    let k = Math.min(fitK(right1, g.maxRight), below ? fitK(belowR1, g.maxRight) : 1);
+    if (hasImg) {
+      const imgLeft = g.img.x - 40;
+      // judged at full size (a shrunk block never moves down), so the test can't flip as k changes
+      if (dolBottom1 > g.img.y) k = Math.min(k, fitK(centsX1, imgLeft));
+      if (below && g.each.base + 0.25 * g.each.fs > g.img.y) k = Math.min(k, fitK(belowR1, imgLeft));
     }
-    const below = each || (unit && !g.unit.beside ? unit : "");
-    if (below) out += `<text x="${(centsX + g.each.dx).toFixed(1)}" y="${g.each.base}" font-family='${F_WORDS}' font-weight="${g.each.weight || 500}" font-size="${g.each.fs}" fill="#fff">${below}</text>`;
+    const X = (x) => (x0 + (x - x0) * k).toFixed(1), Y = (y) => (top + (y - top) * k).toFixed(1), F = (fs) => (fs * k).toFixed(1);
+    let out = "";
+    if (p.cur) out += `<text x="${X(g.cur.x)}" y="${Y(g.cur.base)}" font-family='${F_PRICE}' font-weight="700" font-size="${F(g.cur.fs)}" fill="#fff">$</text>`;
+    out += `<text x="${X(x0 + curW)}" y="${Y(dolBottom1)}" font-family='${F_PRICE}' font-weight="700" font-size="${F(g.dol.fs)}" fill="#fff">${esc(p.dol)}</text>`;
+    out += `<text x="${X(centsX1)}" y="${Y(g.cents.base)}" font-family='${F_PRICE}' font-weight="700" font-size="${F(g.cents.fs)}" letter-spacing="${(cls * g.cents.fs * k).toFixed(1)}" fill="#fff">${esc(p.cents)}</text>`;
+    if (unit && g.unit.beside) out += `<text x="${X(centsX1 + centsW + unitGap)}" y="${Y(g.unit.base || g.cents.base)}" font-family='${F_PRICE}' font-weight="400" font-size="${F(g.unit.fs)}" fill="#fff">${unit}</text>`;
+    if (below) out += `<text x="${X(belowX1)}" y="${Y(g.each.base)}" font-family='${F_WORDS}' font-weight="${g.each.weight || 500}" font-size="${F(g.each.fs)}" fill="#fff">${below}</text>`;
     return out;
   }
 
@@ -160,6 +173,7 @@
 
   /* opts: { orient, type, priceC, wasC, uom, size, desc, plu, img } */
   function render(o) {
+    pickFont();
     const orient = o.orient === "portrait" ? "portrait" : "landscape";
     const g = G[orient];
     const h = HEAD[o.type] || HEAD.edlp;
@@ -169,7 +183,7 @@
       ${o.img ? `<image href="${esc(o.img)}" x="${g.img.x}" y="${g.img.y}" width="${g.img.w}" height="${g.img.h}" preserveAspectRatio="xMidYMid meet"/>` : ""}
       ${header(g, h, orient, o.type)}
       ${h.was ? wasTab(g, o.wasC) : ""}
-      ${price(g, o.priceC, o.uom)}
+      ${price(g, o.priceC, o.uom, !!o.img)}
       ${o.plu ? `<text x="${g.plu.x}" y="${g.plu.base}" font-family='${F_WORDS}' font-weight="500" font-size="${g.plu.fs}" fill="#fff">${esc(o.plu)}</text>` : ""}
       ${descText(g, o.desc, sizeLine)}
     </svg>`;

@@ -15,7 +15,8 @@
     let st = { key: null, state: "idle", t0: 0 }, tick = 0, guard = 0;
     // the preview is built by the backend: offline, it waits; back online, it starts
     addEventListener("online", () => { if (st.state === "offline") { st.state = "idle"; onChange(); } else onChange(); });
-    addEventListener("offline", () => onChange());
+    // dropping offline mid-build: stop and wait, same as arriving offline; it starts over when the connection returns
+    addEventListener("offline", () => { if (st.state === "building") { stopTimers(); st.state = "offline"; } onChange(); });
     const stopTimers = () => { clearInterval(tick); clearTimeout(guard); };
     return {
       ready: (key) => st.key === key && st.state === "ready",

@@ -483,11 +483,11 @@ details.demo .chip-row { margin-top: 8px; }
 .finishbar { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); }
 
 /* ---------- install ---------- */
-/* Sign type: words in Bogle, prices in Helvetica Bold. Bogle is licensed — drop Bogle-Bold.woff2 into /fonts to use it; until then Figtree stands in (closest free match). */
-@font-face { font-family: "Bogle"; font-weight: 700; font-display: swap; src: local("Bogle Bold"), local("Bogle-Bold"), url("../fonts/Bogle-Bold.woff2") format("woff2"); }
+/* Sign type cards in the app: Figtree words, Helvetica-metric prices. No customer font in the app. Bogle is only for Walmart signs (js/sign.js), when Walmart provides the file in /fonts. */
+@font-face { font-family: "Bogle"; font-weight: 700; font-display: swap; src: url("../fonts/Bogle-Bold.woff2") format("woff2"); /* the provided file only, never a copy installed on the phone */ }
 @font-face { font-family: "SignPrice"; font-weight: 700; font-display: block; src: url("../fonts/sign-price-bold.woff") format("woff"); }
 @font-face { font-family: "SignPrice"; font-weight: 400; font-display: block; src: url("../fonts/sign-price-regular.woff") format("woff"); }
-:root { --f-sign-words: "Bogle", "Figtree", "Helvetica Neue", Arial, sans-serif; --f-sign-price: "SignPrice", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+:root { --f-sign-words: "Figtree", "Helvetica Neue", Arial, sans-serif; --f-sign-price: "SignPrice", "Helvetica Neue", Helvetica, Arial, sans-serif; }
 .eyebrow-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font: 700 12px/1 var(--f-body); letter-spacing: .04em; text-transform: uppercase; color: var(--fg-2); }
 .id-tag { background: var(--fg); color: var(--bg); padding: 5px 8px; border-radius: 6px; text-transform: none; letter-spacing: .04em; }
 .input.big { height: 56px; font-size: 18px; font-weight: 600; }

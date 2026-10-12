@@ -149,7 +149,8 @@
         <div class="choice-list">${SYMPTOMS.map((s) => `<button class="choice" data-sym="${s.id}"><span class="choice-t">${esc(s.t)}</span>${s.n ? `<span class="note">${esc(s.n)}</span>` : ""}${I.next}</button>`).join("")}</div>`;
       case "node": {
         const n = NODES[f.node];
-        if (n.kind === "wake") return `${ECGuide.html(ECGuide.WAKE, n.title)}`;
+        if (n.kind === "wake") return `${ECGuide.html(ECGuide.WAKE, n.title)}
+          <button class="hint-row" id="no-light">${I.warn}<span>No light? Check the battery</span>${I.next}</button>`;
         if (n.kind === "q") return `
           <div class="stage">${ECArt.wake(n.art)}</div>
           <ul class="lines">${n.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
@@ -195,7 +196,7 @@
   function navHtml() {
     const n = f.step === "node" ? NODES[f.node] : null;
     if (f.step === "issue" && f.sub === "sent") return "";
-    if (n && ["replace", "fixed"].includes(n.kind)) return "";
+    /* end screens: their own buttons, plus Back to the last answer */
     let fwd = "";
     if (f.step === "issue" && f.issue === "battery" && f.sub !== "wake") fwd = `<button class="btn" id="next">Open the battery guide</button>`;
     else if (f.step === "issue") fwd = `<button class="btn" id="next">Done</button>`;
@@ -288,5 +289,6 @@
   }
 
   if (!dev() && !["home", "find"].includes(f.step)) f = state.flows.maint = fresh();
+  EC.flowPage("maint", { back, finished: () => f.step === "issue" && f.sub === "sent", atStart: () => f.step === "home" });
   render();
 })();

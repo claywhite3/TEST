@@ -80,6 +80,7 @@
     const st = STEPS[idx];
     $("count").textContent = `${idx + 1} / ${N}`;
     dots.forEach((d, i) => d.setAttribute("aria-selected", String(i === idx)));
+    { const cap = document.getElementById("caption"); if (!cap || !cap.isConnected) return; }
     $("caption").innerHTML = `
       <span class="step-no">Step ${idx + 1} of ${N}</span>
       <h2>${esc(st.title)}</h2>
@@ -143,7 +144,13 @@
   $("again")?.addEventListener("click", () => { $("post").scrollTop = 0; goTo(0, false); });
   $("home")?.addEventListener("click", () => { delete state.flows.battery; go("home"); });
   // opened from Install: return there (both the always-visible link and the last-step button)
-  const backToInstall = () => { const to = f.returnTo || "install"; delete state.flows.battery; go(to); };
+  // step back to the task's own history entry (no new entry, so the phone's back from the task's first step goes Home)
+  const backToInstall = () => {
+    const to = f.returnTo || "install"; delete state.flows.battery; EC.save();
+    let fromTask = false;
+    try { fromTask = !!document.referrer && new URL(document.referrer).pathname.endsWith("/" + EC.PAGES[to]); } catch { /* no referrer */ }
+    if (fromTask) history.back(); else location.replace(EC.PAGES[to]);
+  };
   $("to-install")?.addEventListener("click", backToInstall);
   $("to-install-now")?.addEventListener("click", backToInstall);
 

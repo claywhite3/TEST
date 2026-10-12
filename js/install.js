@@ -208,7 +208,7 @@
      Wrong shape → shake, keep scanning (10). Camera released on every exit (12, 13). */
   const ZXING_URL = "lib/zxing.min.js"; // bundled (Apache-2.0) so iPhone scanning works offline
   const scanner = {
-    state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, last: { v: "", t: 0 }, torch: false,
+    state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, seen: {}, torch: false,
     async start() {
       if (this.state === "starting" || this.state === "running") return;
       this.paint("starting");
@@ -256,10 +256,14 @@
       const v = norm(raw);
       const now = Date.now();
       if (isSerialShape(v)) {
-        if (v === this.last.v && now - this.last.t < 2500) return false; // same code still in view
-        this.last = { v, t: now };
-        if (f.multi) { addSerial(v); flash(); return false; }
-        this.stop(); addSerial(v); return true;
+        // a code in view counts once: it must leave the frame for 2.5 s before it's read again
+        if (now - (this.seen[v] || 0) < 2500) { this.seen[v] = now; return false; } // still in view (each code tracked, so two in frame don't alternate)
+        this.seen[v] = now;
+        const ok = addSerial(v);
+        if (ok) flash(); // green only for a display that was added; rejected or already-listed reads never flash
+        if (f.multi || !ok) return false; // batch keeps going; one-display keeps the camera open after a rejected read
+        this.state = "closing"; setTimeout(() => this.stop(), 450); // one display: flash, then stop
+        return true;
       }
       if (now - this.lastShake > 900) { // wrong code (UPC, pallet label): shake, keep going
         this.lastShake = now;
@@ -530,17 +534,28 @@
         <button class="hint-row" id="no-light">${I.warn}<span>No light? Check the battery</span>${I.next}</button>`;
 
       case "done": return `
-        <div class="done-list">${f.devices.map((d) => `
-          <div class="device-card"><div class="head">
-            <span><span class="mono" style="font-weight:700">${esc(d.serial)}</span><br><span class="note">${esc(loc(d))}</span></span>
-            <span class="status pending">${I.clock}Updating</span>
-          </div>${d.locMode === "replace" && d.replaces ? `<p class="note" style="margin:8px 0 0">Replaced ${esc(d.replaces)}. Put it in the back room where the new displays are kept, battery still in. Someone will be by to collect it.</p>` : ""}</div>`).join("")}</div>
-        <p class="note">Each display updates in 3–5 minutes.</p>
+        <div class="done-list" id="done-list">${doneCards()}</div>
+        <p class="note">Each display updates in 3–5 minutes. Status changes to Updated when it connects. If nothing connects within ${EC.NOT_CONFIRMED_MIN} minutes it shows Not confirmed.</p>
         <button class="btn" id="again">Install next display</button>
         <button class="btn ghost" id="home">Home</button>`;
     }
     return "";
   }
+
+  /* Sent: each display's live status (Waiting for wake → Updated, or Not confirmed), repainted every 5 s */
+  const chip = (st) => `<span class="status ${EC.STATUS[st].cls}">${st === "updated" ? I.ok : st === "waiting" ? I.clock : I.x}${EC.STATUS[st].word}</span>`;
+  function doneCards() {
+    const live = EC.fleet(s.id);
+    return f.devices.map((d) => {
+      const st = (live.find((x) => x.serial === d.serial) || {}).status || "waiting";
+      return `
+          <div class="device-card"><div class="head">
+            <span><span class="mono" style="font-weight:700">${esc(d.serial)}</span><br><span class="note">${esc(loc(d))}</span></span>
+            ${chip(st)}
+          </div>${d.locMode === "replace" && d.replaces ? `<p class="note" style="margin:8px 0 0">Replaced ${esc(d.replaces)}. Put it in the back room where the new displays are kept, battery still in. Someone will be by to collect it.</p>` : ""}</div>`;
+    }).join("");
+  }
+  let ticker = 0;
 
   /* camera window: drawn at the very top of the screen, right under the phone's own camera */
   const scanBlock = () => `<div class="scan-top">
@@ -568,6 +583,7 @@
   const app = $("app");
   function render() {
     scanner.release(); scanner.state = "idle";
+    clearInterval(ticker);
     const i = STEPS.indexOf(f.step);
     const total = STEPS.length - 1;
     const [title, sub] = COPY[f.step];
@@ -623,6 +639,7 @@
     const paint = () => {
       const w = WAKE_[idx];
       dots.forEach((d, k) => d.setAttribute("aria-selected", String(k === idx)));
+      if (!track.isConnected) return; // left the step before this frame
       $("caption").innerHTML = `<span class="step-no">Step ${idx + 1} of ${WAKE_.length}</span><h2>${esc(w.title)}</h2>
         <ul class="lines">${w.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
         ${idx === 0 ? `<p class="swipe-hint">Swipe the picture for the next step</p>` : ""}`;
@@ -699,7 +716,9 @@
     function bindLocate() {
       document.querySelectorAll("[data-lockind]").forEach((b) => b.onclick = () => {
         f.locKind = b.dataset.lockind; f.locGuide = true; save();
+        const typed = $("locate").dataset.typed;
         $("locate").outerHTML = locateGuide(); bindLocate();
+        if (typed) $("locate").dataset.typed = typed; // once a field was tapped, the lines stay hidden
       });
       const t = $("loc-guide");
       if (t) t.onclick = () => { f.locGuide = !f.locGuide; save(); $("locate").dataset.open = f.locGuide; t.setAttribute("aria-expanded", f.locGuide); };
@@ -740,12 +759,12 @@
       } else if (/^\d{4}$/.test(raw) && RETAILER.has(raw)) {
         f.desc = ""; f.plu = raw; f.img = "";
         note.textContent = `PLU ${raw} is retailer-assigned. Type the item name.`; note.classList.remove("warn");
-      } else if (/^\d{4}$/.test(raw) && !raw.startsWith("9")) {
+      } else if ((/^\d{4}$/.test(raw) && !raw.startsWith("9")) || /^9\d{4}$/.test(raw)) { // 5-digit 9-codes are organic: not found either
         f.desc = ""; f.plu = ""; f.img = "";
         note.textContent = "PLU not found. Type the item name."; note.classList.add("warn");
       } else {
-        f.desc = desc.value;
-        if (/^\d*$/.test(raw)) { f.plu = ""; f.img = ""; note.textContent = ""; }
+        f.desc = desc.value; note.classList.remove("warn");
+        if (/^\d*$/.test(raw)) { f.plu = ""; f.img = ""; note.textContent = ""; } else if (!f.plu) note.textContent = "";
       }
       save(); refreshNext();
     });
@@ -774,6 +793,7 @@
 
     bindWake();
 
+    if (f.step === "done") ticker = setInterval(() => { const box = $("done-list"); if (box) box.innerHTML = doneCards(); }, 5000);
     $("again")?.addEventListener("click", () => {
       const keep = { lastZone: f.lastZone, lastAisle: f.lastAisle, orient: f.orient, locKind: f.locKind, locGuide: f.locGuide };
       f = state.flows.install = Object.assign(fresh(), keep, { step: "scan" });
@@ -782,5 +802,6 @@
     $("home")?.addEventListener("click", () => { delete state.flows.install; go("home"); });
   }
 
+  EC.flowPage("install", { back, finished: () => f.step === "done", atStart: () => f.step === "battery" });
   render();
 })();

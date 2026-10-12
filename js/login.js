@@ -18,11 +18,11 @@
         <form class="form" id="login-form" novalidate>
           <div class="field">
             <label for="email">Work email</label>
-            <input class="input" id="email" type="email" autocomplete="username" value="clay.white@vusiongroup.com" />
+            <input class="input" id="email" type="email" autocomplete="username" value="tech@example.com" />
           </div>
           <div class="field">
             <label for="password">Password</label>
-            <input class="input" id="password" type="password" autocomplete="current-password" value="demo-demo" />
+            <input class="input" id="password" type="password" autocomplete="current-password" value="demo" />
           </div>
           <div class="form-error" id="login-error" role="alert"></div>
         </form>

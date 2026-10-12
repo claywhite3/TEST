@@ -8,7 +8,7 @@
   const { state, save, site, go, guard, esc, I, header, bindHeader, haptic, SERIAL_LEN, STATUS } = EC;
   if (!guard()) return;
 
-  const FLOW_V = 1;
+  const FLOW_V = 2; // v0.8.4: wake list kept apart from the selection
   const SPARK = '<svg class="spark" viewBox="-16 -16 32 32" aria-hidden="true"><g fill="currentColor">' +
     [0, 60, 120, 180, 240, 300].map((r) => `<rect x="-2.1" y="-15" width="4.2" height="10" rx="2.1" transform="rotate(${r})"/>`).join("") + "</g></svg>";
   const TYPES = [
@@ -47,7 +47,7 @@
   ];
 
   const fresh = () => ({ v: FLOW_V, step: "find", sel: [], open: {}, type: null, desc: "", plu: "", img: "", priceC: "", wasC: "", uom: "", size: "",
-    wakeIdx: 0, wakeSlide: 0, wakeOnly: false, reject: null, base: null });
+    wakeIdx: 0, wakeSlide: 0, wakeOnly: false, wakeSel: [], reject: null, base: null, baseFor: "" });
   let f = state.flows.content;
   if (!f || f.v !== FLOW_V) f = fresh();
   f = state.flows.content = Object.assign(fresh(), f);
@@ -61,6 +61,8 @@
   const byId = (sn) => fleetNow().find((d) => d.serial === sn);
   const selected = () => f.sel.map(byId).filter(Boolean);
   const selOrient = () => (selected()[0] || {}).orient || null;
+  /* who gets woken: the whole selection, or (Just wake / Wake it again) a smaller list that leaves the selection alone */
+  const wakeList = () => (f.wakeOnly ? f.wakeSel : f.sel);
   const loc = EC.locCode;
   const chip = (st) => `<span class="status ${STATUS[st].cls}">${st === "updated" ? I.ok : st === "waiting" ? I.clock : I.x}${STATUS[st].word}</span>`;
   const thumb = (d, cls = "thumb") => `<span class="${cls}" data-o="${d.orient}">${ECSign.render(Object.assign({ orient: d.orient }, d.sign))}</span>`;
@@ -78,8 +80,8 @@
     f.type = id;
     const t = TYPES.find((x) => x.id === id);
     const b = f.base || {};
-    if (!t.was) f.wasC = "";
-    else if (!f.wasC) f.wasC = b.wasC || b.priceC || "";
+    if (!t.was) { f.wasC = ""; f.wasFrom = ""; }
+    else if (!f.wasC) { f.wasC = b.wasC || b.priceC || ""; f.wasFrom = !f.wasC ? "" : b.wasC ? "was" : "price"; }
   }
 
   /* ---------- validity ---------- */
@@ -100,30 +102,34 @@
     current: "Change the sign",
     details: "Preview sign",
     preview: "Push Content",
-    wake: f.wakeIdx < f.sel.length - 1 ? "Next display" : "Done",
+    wake: f.wakeIdx < wakeList().length - 1 ? "Next display" : "Done",
   }[f.step] || "Continue");
 
   function setStep(st) { scanner.stop(); f.step = st; f.reject = null; save(); render(); const b = $("body"); if (b) b.scrollTop = 0; }
 
   function prefill() {
-    // details come from the first selected display's current sign; the price never does
+    // details come from the first selected display's current sign; the price never does.
+    // Done once per selection: going Back to Current sign and forward again keeps what was typed.
+    const key = f.sel.join(",");
+    if (f.base && f.baseFor === key) return;
+    f.baseFor = key;
     const d = selected()[0];
     const sg = (d && d.sign) || {};
     f.base = { priceC: sg.priceC || "", wasC: sg.wasC || "", type: sg.type || "edlp" };
-    Object.assign(f, { desc: sg.desc || "", plu: sg.plu || "", img: sg.img || "", uom: sg.uom || "", size: sg.size || "", priceC: "", wasC: "" });
+    Object.assign(f, { desc: sg.desc || "", plu: sg.plu || "", img: sg.img || "", uom: sg.uom || "", size: sg.size || "", priceC: "", wasC: "", wasFrom: "" });
     applyType(f.base.type);
   }
 
   function next() {
     if (!valid()) return;
-    const n = f.sel.length;
-    if (f.step === "current") { f.wakeOnly = false; prefill(); return setStep("type"); }
+    const n = wakeList().length;
+    if (f.step === "current") { f.wakeOnly = false; f.wakeSel = []; prefill(); return setStep("type"); }
     if (f.step === "preview") {
       EC.recordPush(f.sel.slice(), signOpts());
       haptic(); f.wakeIdx = 0; f.wakeSlide = 0; return setStep("wake");
     }
     if (f.step === "wake") {
-      EC.markWoken(f.sel[f.wakeIdx]);
+      EC.markWoken(wakeList()[f.wakeIdx]);
       if (f.wakeIdx < n - 1) { f.wakeIdx++; f.wakeSlide = 0; save(); render(); return; }
       return setStep("done");
     }
@@ -144,12 +150,12 @@
       const known = EC.DEVICES.find((x) => x.serial === sn);
       const other = known && EC.site(known.siteId);
       f.reject = { serial: sn, why: other ? `Registered to ${other.name}.` : "Not installed at this site. Use Install first." };
-      save(); paintFind(); return;
+      save(); paintFind(); return false;
     }
     const o = selOrient();
     if (o && d.orient !== o) {
       f.reject = { serial: sn, why: `${loc(d)} is ${d.orient}. This batch is ${o}. Update it separately.` };
-      save(); paintFind(); return;
+      save(); paintFind(); return false;
     }
     f.reject = null;
     const added = !f.sel.includes(sn);
@@ -157,6 +163,7 @@
     f.open[d.zone] = true; f.open[d.zone + d.aisle] = true; // reveal it in the list
     save(); paintFind();
     if (added && !quiet) askPartner(d);
+    return added;
   }
   function toggle(sn) {
     if (f.sel.includes(sn)) { f.sel = f.sel.filter((x) => x !== sn); f.reject = null; save(); paintFind(); }
@@ -173,7 +180,7 @@
   const isSerialShape = (v) => new RegExp(`^[0-9A-Z]{${SERIAL_LEN}}$`).test(v);
   const ZXING_URL = "lib/zxing.min.js"; // bundled (Apache-2.0) so iPhone scanning works offline
   const scanner = {
-    state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, last: { v: "", t: 0 },
+    state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, seen: {}, torch: false,
     async start() {
       if (this.state === "starting" || this.state === "running") return;
       this.paint("starting");
@@ -200,6 +207,7 @@
           if (this.state !== "starting") { this.release(); return; }
           this.paint("running");
         }
+        this.offerTorch();
       } catch (e) {
         this.release();
         this.paint("failed", e && e.name === "NotAllowedError" ? "Camera permission was declined." : "The camera couldn’t start here.");
@@ -208,9 +216,10 @@
     handle(raw) {
       const v = norm(raw), now = Date.now();
       if (isSerialShape(v)) {
-        if (v === this.last.v && now - this.last.t < 2500) return;
-        this.last = { v, t: now };
-        trySelect(v, { fromScan: true });
+        // a code in view counts once: it must leave the frame for 2.5 s before it's read again
+        if (now - (this.seen[v] || 0) < 2500) { this.seen[v] = now; return; } // still in view (each code tracked, so two in frame don't alternate)
+        this.seen[v] = now;
+        if (!trySelect(v, { fromScan: true })) return; // rejected or already selected: no green
         const c = document.querySelector(".scanner .cam");
         if (c) { c.classList.remove("got"); void c.offsetWidth; c.classList.add("got"); }
         return;
@@ -221,6 +230,15 @@
         if (fr) { fr.classList.remove("shake"); void fr.offsetWidth; fr.classList.add("shake"); }
       }
     },
+    offerTorch() {
+      const track = this.stream && this.stream.getVideoTracks && this.stream.getVideoTracks()[0];
+      const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+      const b = $("torch");
+      if (b && caps.torch) {
+        b.hidden = false;
+        b.onclick = async () => { this.torch = !this.torch; try { await track.applyConstraints({ advanced: [{ torch: this.torch }] }); } catch { /* ignore */ } b.setAttribute("aria-pressed", String(this.torch)); };
+      }
+    },
     release() {
       cancelAnimationFrame(this.raf);
       try { this.zx && this.zx.reset(); } catch { /* ignore */ }
@@ -228,6 +246,7 @@
       if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
       const v = $("scan-video"); if (v) v.srcObject = null;
+      this.torch = false;
     },
     stop() { if (this.state === "idle") return; this.release(); this.paint("idle"); },
     paint(st, msg) {
@@ -385,7 +404,7 @@
   function eyebrow() {
     const sel = selected(), n = sel.length;
     if (!n || f.step === "find" || f.step === "done") return "";
-    if (f.step === "wake") { const d = byId(f.sel[f.wakeIdx]); return d ? `<div class="eyebrow-row"><span class="id-tag mono">${esc(d.serial)}</span><span>${esc(loc(d))}${n > 1 ? ` · ${f.wakeIdx + 1} of ${n}` : ""}</span></div>` : ""; }
+    if (f.step === "wake") { const w = wakeList(), d = byId(w[f.wakeIdx]); return d ? `<div class="eyebrow-row"><span class="id-tag mono">${esc(d.serial)}</span><span>${esc(loc(d))}${w.length > 1 ? ` · ${f.wakeIdx + 1} of ${w.length}` : ""}</span></div>` : ""; }
     if (n > 1) return `<div class="eyebrow-row"><span class="id-tag">${n} displays</span><span>Same sign · ${ORIENT[selOrient()]}</span></div>`;
     return `<div class="eyebrow-row"><span class="id-tag mono">${esc(sel[0].serial)}</span><span>${esc(loc(sel[0]))} · ${ORIENT[sel[0].orient]}</span></div>`;
   }
@@ -443,7 +462,7 @@
           </div>
           ${t && t.was ? `<div class="field"><label for="d-was">Was price</label>
             <input class="input big money" id="d-was" data-money="wasC" value="${esc(fmtMoney(f.wasC))}" inputmode="numeric" pattern="[0-9]*" placeholder="$0.00" autocomplete="off" />
-            <span class="field-note" id="was-note">${f.wasC ? "Moved from the current price. Change it if needed." : ""}</span></div>` : ""}`;
+            <span class="field-note${wasNote().startsWith("Was price is not") ? " warn" : ""}" id="was-note">${wasNote()}</span></div>` : ""}`;
       }
 
       case "preview": return `${pv.ready(previewKey()) ? eSign() + (navigator.onLine ? "" : `<div class="offline-note" role="status"><span>Offline. Push Content needs a connection.</span></div>`) : pv.html(previewKey(), selOrient() || "landscape")}<p class="note" style="margin:0">${f.sel.length > 1 ? `Sending to ${f.sel.length} displays.` : `Sending to ${esc(loc(selected()[0]))}.`}</p>`;
@@ -465,21 +484,30 @@
     return "";
   }
 
+  /* Was note: the warning when Was isn't above the price; otherwise where Was came from (until the tech changes it) */
+  function wasNote() {
+    const p = centsToNum(f.priceC), w = centsToNum(f.wasC);
+    if (p !== null && w !== null && w <= p) return "Was price is not higher than the price. Check both.";
+    if (f.wasFrom === "was") return "Carried over from the current sign. Change it if needed.";
+    if (f.wasFrom === "price") return "Moved from the current price. Change it if needed.";
+    return "";
+  }
   function paintDone() {
     const box = $("done-list"); if (!box) return;
-    box.innerHTML = selected().map((d) => `
+    box.innerHTML = wakeList().map(byId).filter(Boolean).map((d) => `
       <div class="device-card"><div class="head">
         <span><span class="mono" style="font-weight:700">${esc(loc(d))}</span><br><span class="note mono">${esc(d.serial)}</span></span>
         ${chip(d.status)}
       </div>${d.status === "unconfirmed" ? `<button class="btn ghost small" data-rewake="${d.serial}">Wake it again</button>` : ""}</div>`).join("");
-    document.querySelectorAll("[data-rewake]").forEach((b) => b.onclick = () => { f.sel = [b.dataset.rewake]; f.wakeOnly = true; f.wakeIdx = 0; f.wakeSlide = 0; setStep("wake"); });
+    document.querySelectorAll("[data-rewake]").forEach((b) => b.onclick = () => { f.wakeSel = [b.dataset.rewake]; f.wakeOnly = true; f.wakeIdx = 0; f.wakeSlide = 0; setStep("wake"); });
   }
 
   /* camera window at the very top, right under the phone's own camera */
   const scanBlock = () => `<div class="scan-top">
         <div class="scanner" id="scanner" data-state="idle">
           <button class="viewfinder" id="vf" aria-label="Start camera and scan a display"><span class="vf-frame"></span><span class="vf-hint">${I.scan.replace("<svg", '<svg style="width:28px;height:28px"')}Tap to scan again</span></button>
-          <div class="cam"><video id="scan-video" playsinline muted></video><span class="vf-frame"></span><span class="scanline"></span><button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button></div>
+          <div class="cam"><video id="scan-video" playsinline muted></video><span class="vf-frame"></span><span class="scanline"></span><button class="cam-btn" id="cam-cancel" aria-label="Stop camera">${I.x}</button>
+            <button class="cam-btn torch" id="torch" aria-label="Flashlight" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 3h8l-2 6h-4z"/><path d="M10 9v11h4V9"/></svg></button></div>
           <div class="cam-fail"><strong>Camera unavailable</strong><span class="note">Type the ID or pick from the list.</span><button class="btn ghost" id="cam-retry">Try again</button></div>
           <div class="cam-state" aria-live="polite"><i></i><span id="cam-msg"></span></div>
         </div>
@@ -526,6 +554,7 @@
     const paint = () => {
       const w = WAKE[idx];
       dots.forEach((d, k) => d.setAttribute("aria-selected", String(k === idx)));
+      if (!track.isConnected) return; // left the step before this frame
       $("caption").innerHTML = `<span class="step-no">Step ${idx + 1} of ${WAKE.length}</span><h2>${esc(w.title)}</h2><ul class="lines">${w.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>${idx === 0 ? `<p class="swipe-hint">Swipe the picture for the next step</p>` : ""}`;
       f.wakeSlide = idx; save();
     };
@@ -538,6 +567,7 @@
     track.addEventListener("pointermove", (e) => { if (drag) track.scrollLeft = drag.left - (e.clientX - drag.x); });
     const end = (e) => { if (!drag) return; const dx = e.clientX - drag.x, from = drag.from; track.classList.remove("dragging"); drag = null; goTo(Math.abs(dx) > track.clientWidth * 0.15 ? from + (dx < 0 ? 1 : -1) : from); };
     track.addEventListener("pointerup", end); track.addEventListener("pointercancel", end);
+    track.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") { e.preventDefault(); goTo(idx + 1); } if (e.key === "ArrowLeft") { e.preventDefault(); goTo(idx - 1); } });
     dots.forEach((d) => d.addEventListener("click", () => goTo(+d.dataset.i)));
     paint(); requestAnimationFrame(() => goTo(idx, false));
   }
@@ -557,7 +587,7 @@
       paintFind();
     }
     $("wake-only")?.addEventListener("click", () => {
-      f.sel = selected().filter((d) => d.status !== "updated").map((d) => d.serial);
+      f.wakeSel = selected().filter((d) => d.status !== "updated").map((d) => d.serial);
       f.wakeOnly = true; f.wakeIdx = 0; f.wakeSlide = 0; setStep("wake");
     });
 
@@ -570,8 +600,8 @@
       const note = $("plu-note");
       if (hit) { f.plu = raw; f.desc = hit.name; f.img = hit.img || ""; desc.value = hit.name; if (hit.uom) { f.uom = hit.uom; $("d-uom").value = hit.uom; applyUom(); } note.textContent = `PLU ${raw} · edit the name if needed`; note.classList.remove("warn"); }
       else if (/^\d{4}$/.test(raw) && RETAILER.has(raw)) { f.desc = ""; f.plu = raw; f.img = ""; note.textContent = `PLU ${raw} is retailer-assigned. Type the item name.`; note.classList.remove("warn"); }
-      else if (/^\d{4}$/.test(raw) && !raw.startsWith("9")) { f.desc = ""; f.plu = ""; f.img = ""; note.textContent = "PLU not found. Type the item name."; note.classList.add("warn"); }
-      else { f.desc = desc.value; if (/^\d*$/.test(raw)) { f.plu = ""; f.img = ""; } }
+      else if ((/^\d{4}$/.test(raw) && !raw.startsWith("9")) || /^9\d{4}$/.test(raw)) { f.desc = ""; f.plu = ""; f.img = ""; note.textContent = "PLU not found. Type the item name."; note.classList.add("warn"); }
+      else { f.desc = desc.value; note.classList.remove("warn"); if (/^\d*$/.test(raw)) { f.plu = ""; f.img = ""; note.textContent = ""; } else if (!f.plu) note.textContent = ""; }
       save(); refreshNext();
     });
     function applyUom() {
@@ -582,9 +612,10 @@
     $("d-size")?.addEventListener("input", (e) => { f.size = e.target.value; save(); refreshNext(); });
     document.querySelectorAll("[data-money]").forEach((inp) => inp.addEventListener("input", () => {
       const c = normCents(inp.value); f[inp.dataset.money] = c; inp.value = fmtMoney(c);
+      if (inp.dataset.money === "wasC") f.wasFrom = ""; // the tech changed it: no longer "moved" or "carried over"
       try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch { /* not supported */ }
       const n = $("was-note");
-      if (n) { const p = centsToNum(f.priceC), w = centsToNum(f.wasC); n.textContent = p !== null && w !== null && w <= p ? "Was price is not higher than the price. Check both." : n.textContent.startsWith("Was price is not") ? "" : n.textContent; n.classList.toggle("warn", p !== null && w !== null && w <= p); }
+      if (n) { const p = centsToNum(f.priceC), w = centsToNum(f.wasC); n.textContent = wasNote(); n.classList.toggle("warn", p !== null && w !== null && w <= p); }
       save(); refreshNext();
     }));
 
@@ -597,5 +628,6 @@
     $("home")?.addEventListener("click", () => { delete state.flows.content; go("home"); });
   }
 
+  EC.flowPage("content", { back, finished: () => f.step === "done", atStart: () => f.step === "find" });
   render();
 })();

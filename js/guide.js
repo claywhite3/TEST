@@ -41,6 +41,7 @@
     const paint = () => {
       const w = steps[idx];
       dots.forEach((d, k) => d.setAttribute("aria-selected", String(k === idx)));
+    { const cap = document.getElementById("caption"); if (!cap || !cap.isConnected) return; }
       document.getElementById("caption").innerHTML = `<span class="step-no">Step ${idx + 1} of ${steps.length}</span><h2>${esc(w.title)}</h2>
         <ul class="lines">${w.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
         ${idx === 0 ? `<p class="swipe-hint">Swipe the picture for the next step</p>` : ""}`;

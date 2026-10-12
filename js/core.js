@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const BUILD = "v0.8.1 · 2026-10-11";
+  const BUILD = "v0.8.4 · 2026-10-11";
 
   /* ---------- fixtures ----------
      Trap cases are deliberate (principle 55). Don't tidy them:
@@ -12,6 +12,9 @@
   const CHAINS = [
     {
       id: "WMT", name: "Walmart",
+      // customer sign font: only once the customer provides it. Walmart hasn't yet; when it does, put Bogle-Bold.woff2 in /fonts
+      // and set signFont: "Bogle". It is then used on this chain's signs only, never in the app.
+      signFont: null,
       sites: [
         { id: "5624", name: "Walmart #5624", city: "Dallas, TX", displays: 48 },
         { id: "5642", name: "Walmart #5642", city: "Garland, TX", displays: 36 },
@@ -106,11 +109,36 @@
   // localStorage, not sessionStorage: an installed app is closed and reopened all day; progress must survive that
   try { state = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(sessionStorage.getItem(KEY)) || {}; } catch { state = {}; }
   state = Object.assign({ user: null, chainId: "WMT", siteId: null, flows: {} }, state);
-  if (state.demo !== 2) { state.fleet = {}; state.removed = {}; state.checkins = {}; state.flows = {}; state.demo = 2; } // demo data reshaped in v0.8.0
+  if (state.demo !== 2) { state.fleet = {}; state.removed = {}; state.checkins = {}; state.flows = {}; state.demo = 2; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } } // demo data reshaped in v0.8.0; saved at once so it runs only once
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
 
   const allSites = () => CHAINS.flatMap((c) => c.sites.map((s) => ({ ...s, chainId: c.id, chain: c.name })));
   const site = (id = state.siteId) => allSites().find((s) => s.id === id) || null;
+  const signFont = () => { const s = site(); const c = s && CHAINS.find((x) => x.id === s.chainId); return (c && c.signFont) || ""; };
+
+  /* a flow page (Install, Update Content, Replace / Remove, Maintenance) registers here:
+     • the phone's back gesture steps back one step inside the flow (one history entry kept while the page is open)
+     • on a Sent screen (finished), leaving the page any way clears the flow */
+  /* to Home without piling up history: step back to it when Home is the page before, otherwise replace this entry */
+  function toHome() {
+    let fromHome = false;
+    try { fromHome = !!document.referrer && new URL(document.referrer).pathname.endsWith("/" + PAGES.home); } catch { /* no referrer */ }
+    if (fromHome) history.back(); else location.replace(PAGES.home);
+  }
+  // a page brought back from the browser's back/forward cache would show stale state: load it fresh
+  addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });
+  function flowPage(name, { back, finished, atStart }) {
+    if (!history.state || !history.state.ecFlow) history.pushState({ ecFlow: 1 }, "");
+    addEventListener("popstate", () => {
+      // Sent: finish the flow and go Home without adding a history entry (so back from Home doesn't reopen it)
+      if (finished()) { delete state.flows[name]; save(); return toHome(); }
+      // first step: leave the flow for Home (progress kept)
+      if (atStart()) { save(); return toHome(); }
+      history.pushState({ ecFlow: 1 }, "");
+      back();
+    });
+    addEventListener("pagehide", () => { if (finished()) { delete state.flows[name]; save(); } });
+  }
 
   /* fleet for a site: seed + installs + pushes + fixes made in the app (kept on the phone) */
   function fleet(siteId = state.siteId) {
@@ -180,7 +208,8 @@
     const d = fleet().find((x) => x.serial === sn);
     if (!d || d.behavior === "silent") return;
     state.checkins = state.checkins || {};
-    state.checkins[sn] = { at: Date.now() + CONNECT_DEMO_SEC * 1000, patch };
+    const prev = state.checkins[sn]; // a later fix adds to an earlier one that hasn't reported yet (re-wake, then battery swap)
+    state.checkins[sn] = { at: Date.now() + CONNECT_DEMO_SEC * 1000, patch: Object.assign({}, prev && prev.patch, patch) };
     save();
   }
   /* take a display off its location (Remove, or the old one in a Replace) */
@@ -352,8 +381,10 @@
           w && w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) offer(w); });
         });
       }).catch(() => { /* not available here (preview sandbox): the app still works online */ });
+      // reload only when a new build replaces a running one; the very first install takes control quietly (no lost taps)
+      const hadController = !!navigator.serviceWorker.controller;
       let reloaded = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
     });
   }
 
@@ -370,5 +401,5 @@
     document.body.appendChild(el);
   });
 
-  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, expectCheckin, removeDisplay, locKey, atLocation, LOC_MAX, ISSUE, issues, locCode, BATT_WARN, BATT_BAD, battLevel, wifiOf, ago, health, NOT_CONFIRMED_MIN, state, save, site, allSites, go, guard, esc, haptic, I, header, bindHeader, sheet };
+  window.EC = { BUILD, CHAINS, MODEL, DEVICES, SERIAL_LEN, fleet, statusOf, STATUS, recordPush, markWoken, expectCheckin, removeDisplay, locKey, atLocation, LOC_MAX, ISSUE, issues, locCode, BATT_WARN, BATT_BAD, battLevel, wifiOf, ago, health, NOT_CONFIRMED_MIN, state, save, site, allSites, signFont, flowPage, PAGES, go, guard, esc, haptic, I, header, bindHeader, sheet };
 })();

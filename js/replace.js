@@ -211,13 +211,15 @@
         devices: [{ serial: f.neu, zone: d.zone, aisle: d.aisle, section: d.section, locKey: EC.locKey(d), locMode: "replace", replaces: d.serial }] };
       delete state.flows.replace; go("install");
     });
-    addEventListener("online", () => { if (f.step === "push") render(); });
-    addEventListener("offline", () => { if (f.step === "push") render(); });
     $("again")?.addEventListener("click", () => { f = state.flows.replace = fresh(); save(); render(); });
     $("home")?.addEventListener("click", () => { delete state.flows.replace; go("home"); });
     if (f.step === "done") setTimeout(() => { if (f.step === "done") render(); }, 5000); // live status
   }
 
+  // registered once (not per render): the push step repaints when the connection comes or goes
+  addEventListener("online", () => { if (f.step === "push") render(); });
+  addEventListener("offline", () => { if (f.step === "push") render(); });
   if (!oldD() && f.step !== "find") f = state.flows.replace = fresh();
+  EC.flowPage("replace", { back, finished: () => ["done", "removed"].includes(f.step), atStart: () => f.step === "find" });
   render();
 })();

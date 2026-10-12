@@ -83,7 +83,7 @@
       return true;
     }
     const scanner = {
-      state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, last: { v: "", t: 0 }, torch: false,
+      state: "idle", stream: null, raf: 0, zx: null, lastShake: 0, seen: {}, torch: false,
       async start() {
         if (this.state === "starting" || this.state === "running") return;
         this.paint("starting");
@@ -119,8 +119,8 @@
       handle(raw) {
         const v = norm(raw), now = Date.now();
         if (isShape(v)) {
-          if (v === this.last.v && now - this.last.t < 2500) return false;
-          this.last = { v, t: now };
+          if (now - (this.seen[v] || 0) < 2500) { this.seen[v] = now; return false; } // still in view (each code tracked, so two in frame don't alternate)
+          this.seen[v] = now;
           return tryPick(v, true);
         }
         if (now - this.lastShake > 900) {
@@ -156,8 +156,7 @@
         $("cam-msg").textContent = { idle: "", starting: "Starting camera…", running: "Aim at the barcode on the bezel", failed: msg || "" }[st];
       },
     };
-    addEventListener("visibilitychange", () => { if (document.hidden) scanner.stop(); });
-    addEventListener("pagehide", () => scanner.release());
+    current = scanner; // page lifecycle listeners are registered once below and act on the live scanner
 
     scanner.paint("idle");
     $("vf").onclick = () => scanner.start();
@@ -177,6 +176,10 @@
     bindList();
     return { scanner };
   }
+
+  let current = null;
+  addEventListener("visibilitychange", () => { if (document.hidden && current) current.stop(); });
+  addEventListener("pagehide", () => { if (current) current.release(); });
 
   const bodyHtml = ({ list = true, placeholder = "Or type the display ID" } = {}) => `
     <div class="serial-field"><input class="input" id="pick-serial" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Display ID" placeholder="${esc(placeholder)}" /><span class="len" id="pick-len">0/${SERIAL_LEN}</span></div>
